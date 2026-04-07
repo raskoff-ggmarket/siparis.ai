@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Sipariş Asistanı</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117; --card: #181b23; --border: #262a36;
+  --accent: #e8723a; --accent-glow: rgba(232,114,58,0.15);
+  --green: #34d399; --green-bg: rgba(52,211,153,0.1);
+  --red: #f87171; --red-bg: rgba(248,113,113,0.1);
+  --yellow: #fbbf24; --yellow-bg: rgba(251,191,36,0.1);
+  --purple: #818cf8; --purple-bg: rgba(129,140,248,0.1);
+  --text: #e4e0d8; --dim: #6b7084; --mid: #9ca0b0;
+  --font: 'Outfit', sans-serif; --display: 'Fraunces', serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; display:flex; }
+::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
+
+/* SIDEBAR */
+.sidebar {
+  width:220px; background:var(--card); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:50;
+}
+.sidebar-logo { padding:20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.sidebar-logo .icon { font-size:26px; }
+.sidebar-logo .title { font-family:var(--display); font-weight:900; font-size:18px; color:var(--accent); line-height:1.1; }
+.sidebar-logo .sub { font-family:var(--display); font-weight:700; font-size:13px; color:var(--mid); }
+.sidebar-nav { flex:1; padding:14px 10px; display:flex; flex-direction:column; gap:3px; }
+.nav-btn {
+  display:flex; align-items:center; gap:12px; padding:11px 14px; border:none; border-radius:10px;
+  background:transparent; color:var(--dim); font-family:var(--font); font-weight:500; font-size:14px;
+  cursor:pointer; transition:all .15s; text-align:left; width:100%;
+}
+.nav-btn:hover { background:rgba(255,255,255,0.03); }
+.nav-btn.active { background:var(--accent-glow); color:var(--accent); font-weight:700; }
+.nav-btn .ico { font-size:18px; }
+.sidebar-foot { padding:14px 20px; border-top:1px solid var(--border); font-size:11px; color:var(--dim); line-height:1.6; }
+
+/* BOTTOM NAV */
+.bottom-nav {
+  display:none; position:fixed; bottom:0; left:0; right:0; background:var(--card);
+  border-top:1px solid var(--border); z-index:50; padding:6px 0 env(safe-area-inset-bottom, 6px);
+}
+.bottom-nav-inner { display:flex; justify-content:space-around; }
+.bnav-btn {
+  display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 10px;
+  border:none; background:transparent; color:var(--dim); cursor:pointer; font-family:var(--font);
+}
+.bnav-btn.active { color:var(--accent); }
+.bnav-btn .ico { font-size:20px; }
+.bnav-btn .lbl { font-size:10px; font-weight:500; }
+.bnav-btn.active .lbl { font-weight:700; }
+
+/* MAIN */
+.main { flex:1; margin-left:220px; min-height:100vh; }
+.header {
+  padding:20px 32px; border-bottom:1px solid var(--border); display:flex;
+  align-items:center; justify-content:space-between; background:var(--card); flex-wrap:wrap; gap:10px;
+}
+.header h1 { font-family:var(--display); font-weight:900; font-size:22px; }
+.header p { font-size:13px; color:var(--dim); margin-top:4px; }
+.content { padding:24px 32px 80px; }
+
+/* CARDS */
+.grid { display:grid; gap:16px; margin-bottom:24px; }
+.grid-3 { grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); }
+.grid-2 { grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); }
+
+.kpi {
+  background:var(--card); border-radius:14px; padding:20px 18px; border:1px solid var(--border);
+}
+.kpi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.kpi-label { font-size:11px; color:var(--dim); font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+.kpi-icon { font-size:20px; }
+.kpi-value { font-size:28px; font-weight:900; font-family:var(--display); }
+
+.chart-card {
+  background:var(--card); border-radius:14px; border:1px solid var(--border); padding:20px; margin-bottom:16px;
+}
+.chart-card-title { font-size:14px; font-weight:700; font-family:var(--display); margin-bottom:16px; }
+.chart-wrap { position:relative; width:100%; height:260px; }
+
+/* UPLOAD */
+.upload-box {
+  background:var(--card); border:2px dashed var(--border); border-radius:14px;
+  padding:28px 20px; text-align:center; cursor:pointer; transition:all .2s;
+}
+.upload-box:hover { border-color:var(--accent); background:var(--accent-glow); }
+.upload-box.done { border:2px solid var(--green); background:var(--green-bg); }
+.upload-box .ico { font-size:32px; margin-bottom:8px; }
+.upload-box .ttl { font-weight:700; font-size:14px; margin-bottom:4px; }
+.upload-box .desc { font-size:12px; color:var(--dim); margin-bottom:8px; }
+.upload-box .fname { font-family:monospace; font-size:11px; color:var(--accent); background:var(--accent-glow); display:inline-block; padding:3px 10px; border-radius:6px; }
+
+/* BUTTONS */
+.btn-primary {
+  padding:14px 32px; border:none; border-radius:12px; font-family:var(--font); font-weight:800;
+  font-size:15px; cursor:pointer; transition:all .2s; display:inline-flex; align-items:center; gap:8px;
+}
+.btn-primary.orange { background:linear-gradient(135deg,var(--accent),#d4622e); color:#fff; box-shadow:0 4px 24px var(--accent-glow); }
+.btn-primary.green { background:linear-gradient(135deg,var(--green),#059669); color:#fff; box-shadow:0 4px 24px var(--green-bg); }
+.btn-primary.purple { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; box-shadow:0 4px 20px rgba(99,102,241,0.3); }
+.btn-primary:disabled { background:#333!important; color:#666!important; cursor:not-allowed; box-shadow:none!important; }
+
+/* TABLE */
+.data-table { width:100%; border-collapse:collapse; font-size:13px; }
+.data-table th {
+  padding:12px 10px; text-align:left; color:var(--dim); border-bottom:2px solid var(--border);
+  font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.8px; cursor:pointer; user-select:none;
+}
+.data-table td { padding:10px; border-bottom:1px solid var(--border); }
+.data-table tr:nth-child(even) { background:rgba(255,255,255,0.01); }
+
+/* BADGES */
+.badge {
+  display:inline-block; padding:4px 10px; border-radius:8px; font-size:11px; font-weight:700; letter-spacing:.5px; white-space:nowrap;
+}
+.badge-red { background:var(--red-bg); color:var(--red); }
+.badge-yellow { background:var(--yellow-bg); color:var(--yellow); }
+.badge-green { background:var(--green-bg); color:var(--green); }
+.badge-gray { background:rgba(150,150,150,0.08); color:var(--dim); }
+
+/* PILLS */
+.pills { display:flex; gap:6px; flex-wrap:wrap; }
+.pill {
+  padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; background:var(--red-bg); color:var(--red);
+}
+
+/* FILTER BAR */
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+.filter-bar input, .filter-bar select {
+  padding:9px 14px; border-radius:10px; border:1px solid var(--border); background:var(--card);
+  color:var(--text); font-size:13px; font-family:var(--font); outline:none;
+}
+.filter-bar input { min-width:200px; }
+
+/* INFO */
+.info-box {
+  background:var(--purple-bg); border:1px solid rgba(99,102,241,0.12); border-radius:10px;
+  padding:12px 16px; font-size:12px; color:var(--mid); line-height:1.6;
+}
+.ai-response {
+  background:rgba(99,102,241,0.04); border:1px solid rgba(99,102,241,0.12);
+  border-radius:14px; padding:24px; white-space:pre-wrap; word-break:break-word;
+  font-size:13px; line-height:1.8;
+}
+.spinner {
+  width:20px; height:20px; border:3px solid rgba(99,102,241,0.3); border-top:3px solid #6366f1;
+  border-radius:50%; animation:spin 1s linear infinite; display:inline-block;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.empty { text-align:center; padding:80px 20px; color:var(--dim); }
+.empty .ico { font-size:48px; margin-bottom:16px; }
+.empty .txt { font-size:15px; line-height:1.6; }
+
+.section { display:none; }
+.section.active { display:block; }
+
+.preview-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:12px; }
+.preview-table th { padding:8px 10px; text-align:left; color:var(--dim); border-bottom:1px solid var(--border); font-weight:600; }
+.preview-table td { padding:8px 10px; border-bottom:1px solid var(--border); color:var(--mid); }
+
+@media(max-width:900px) {
+  .sidebar { display:none!important; }
+  .main { margin-left:0!important; }
+  .bottom-nav { display:block!important; }
+  .content { padding:16px 16px 100px; }
+  .header { padding:16px; }
+  .header h1 { font-size:18px; }
+  .grid-3 { grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); }
+  .grid-2 { grid-template-columns:1fr; }
+  .kpi-value { font-size:22px; }
+  .chart-wrap { height:220px; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="icon">🏪</span>
+    <div><div class="title">Market</div><div class="sub">Sipariş Asistanı</div></div>
+  </div>
+  <div class="sidebar-nav" id="sidebarNav"></div>
+  <div class="sidebar-foot" id="seasonInfo"></div>
+</aside>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav" id="bottomNav"><div class="bottom-nav-inner" id="bottomNavInner"></div></div>
+
+<!-- MAIN -->
+<div class="main" id="mainArea">
+  <div class="header">
+    <div><h1 id="pageTitle">Dosya Yükleme</h1><p id="pageSubtitle">Excel dosyalarınızı yükleyin</p></div>
+    <div class="pills" id="headerPills"></div>
+  </div>
+  <div class="content" id="content">
+
+    <!-- UPLOAD -->
+    <div class="section active" id="sec-upload">
+      <div class="grid grid-3" id="uploadBoxes"></div>
+      <div id="previewArea"></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;align-items:flex-start;">
+        <button class="btn-primary orange" id="btnAnalyze" disabled onclick="runAnalysis()">🚀 Analizi Başlat</button>
+        <div class="info-box" style="flex:1;min-width:200px;">💡 Excel sütun başlıkları otomatik algılanır: Ürün Kodu, Ürün Adı, Satış Adedi, Stok, Kategori, Fiyat</div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="section" id="sec-dashboard">
+      <div class="grid grid-3" id="kpiGrid"></div>
+      <div class="grid grid-2" id="chartsGrid"></div>
+      <div class="chart-card" id="topTableCard" style="display:none;">
+        <div class="chart-card-title">🏆 En Çok Satan İlk 10 Ürün</div>
+        <div style="overflow-x:auto;"><table class="data-table" id="topTable"></table></div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="section" id="sec-table">
+      <div class="filter-bar" id="filterBar"></div>
+      <div class="chart-card" style="padding:0;overflow:hidden;">
+        <div style="overflow-x:auto;"><table class="data-table" id="fullTable"></table></div>
+        <div id="tableFooter" style="padding:14px;text-align:center;color:var(--dim);font-size:12px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- AI -->
+    <div class="section" id="sec-ai">
+      <div class="chart-card" style="max-width:800px;">
+        <div class="chart-card-title">🤖 AI Sipariş Danışmanı</div>
+        <p style="color:var(--mid);font-size:13px;margin-bottom:16px;line-height:1.7;">
+          AI agent verilerinizi analiz ederek sezonluk sipariş stratejisi, kategori önerileri, risk analizi ve turizm sezonu tavsiyeleri üretir.
+        </p>
+        <button class="btn-primary purple" id="btnAI" disabled onclick="runAI()">🧠 AI Analizi Çalıştır</button>
+        <div id="aiLoading" style="display:none;margin-top:16px;display:flex;align-items:center;gap:12px;padding:20px;background:var(--purple-bg);border-radius:12px;border:1px solid rgba(99,102,241,0.15);">
+          <div class="spinner"></div><span style="color:var(--mid);font-size:13px;">Verileriniz analiz ediliyor...</span>
+        </div>
+        <div id="aiResult" style="margin-top:16px;display:none;" class="ai-response"></div>
+      </div>
+      <div class="chart-card" style="max-width:800px;">
+        <div class="chart-card-title">🎓 AI Agent Nasıl Çalışır?</div>
+        <div style="font-size:13px;color:var(--mid);line-height:1.8;">
+          <p><b style="color:var(--accent);">1. Veri Toplama:</b> Excel dosyalarınızdan ürün, satış ve stok verileri okunur.</p>
+          <p style="margin-top:8px;"><b style="color:var(--accent);">2. Sezon Ağırlıkları:</b> Yaz ayları (Haz-Ağu) 1.6x, geçiş ayları (May, Eyl, Eki) 1.0x, düşük aylar 0.5x.</p>
+          <p style="margin-top:8px;"><b style="color:var(--accent);">3. Tahmin Motoru:</b> Geçmiş satış + sezon ağırlıkları ile kalan sezon tahmini üretilir.</p>
+          <p style="margin-top:8px;"><b style="color:var(--accent);">4. AI Analizi:</b> Claude API'ye veriler gönderilir, stratejik analiz alınır.</p>
+          <p style="margin-top:8px;"><b style="color:var(--accent);">5. Sonuç:</b> Sipariş listesi öncelik sırasıyla oluşturulup Excel olarak indirilebilir.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDER -->
+    <div class="section" id="sec-order">
+      <div class="grid grid-3" id="orderKpi"></div>
+      <div class="chart-card" id="orderTableCard" style="padding:0;overflow:hidden;display:none;">
+        <div style="overflow-x:auto;"><table class="data-table" id="orderTable"></table></div>
+      </div>
+      <button class="btn-primary green" id="btnExport" style="margin-top:16px;display:none;" onclick="exportOrder()">📥 Sipariş Listesini Excel İndir</button>
+      <div class="empty" id="orderEmpty"><div class="ico">🛒</div><div class="txt">Henüz sipariş önerisi yok. Önce dosya yükleyip analiz başlatın.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════ CONFIG ═══════════════ */
+const MONTHS_TR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+const SEASON=[3,4,5,6,7,8,9,10,11,12];
+const PEAK=[6,7,8], SHOULDER=[5,9,10], LOW=[3,4,11,12];
+const WT={peak:1.6,shoulder:1.0,low:0.5};
+const mc=m=>PEAK.includes(m)?"peak":SHOULDER.includes(m)?"shoulder":"low";
+const cm=()=>new Date().getMonth()+1;
+const elapsedM=()=>SEASON.filter(m=>m<cm());
+const remainM=()=>SEASON.filter(m=>m>=cm());
+
+/* ═══════════════ STATE ═══════════════ */
+let currentView="upload";
+let fileData={products:[],sales:[],stock:[]};
+let fileNames={products:null,sales:null,stock:null};
+let results=[];
+let chartInstances={};
+
+const NAV=[
+  {id:"upload",icon:"📁",label:"Yükle"},
+  {id:"dashboard",icon:"📊",label:"Dashboard"},
+  {id:"table",icon:"📋",label:"Detay"},
+  {id:"ai",icon:"🤖",label:"AI Agent"},
+  {id:"order",icon:"🛒",label:"Sipariş"},
+];
+
+/* ═══════════════ INIT ═══════════════ */
+function init(){
+  buildNav();
+  buildUploadBoxes();
+  updateSeasonInfo();
+  switchView("upload");
+}
+
+function buildNav(){
+  const sn=document.getElementById("sidebarNav");
+  const bn=document.getElementById("bottomNavInner");
+  NAV.forEach(n=>{
+    const sb=document.createElement("button");
+    sb.className="nav-btn"; sb.dataset.view=n.id;
+    sb.innerHTML=`<span class="ico">${n.icon}</span>${n.label}`;
+    sb.onclick=()=>switchView(n.id);
+    sn.appendChild(sb);
+    const bb=document.createElement("button");
+    bb.className="bnav-btn"; bb.dataset.view=n.id;
+    bb.innerHTML=`<span class="ico">${n.icon}</span><span class="lbl">${n.label}</span>`;
+    bb.onclick=()=>switchView(n.id);
+    bn.appendChild(bb);
+  });
+}
+
+function switchView(v){
+  currentView=v;
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  const sec=document.getElementById("sec-"+v);
+  if(sec) sec.classList.add("active");
+  document.querySelectorAll(".nav-btn,.bnav-btn").forEach(b=>{
+    b.classList.toggle("active",b.dataset.view===v);
+  });
+  const titles={upload:"Dosya Yükleme",dashboard:"Dashboard",table:"Ürün Detayları",ai:"AI Sipariş Danışmanı",order:"Sipariş Listesi"};
+  document.getElementById("pageTitle").textContent=titles[v]||"";
+  document.getElementById("pageSubtitle").textContent=results.length?`${results.length} ürün analiz edildi`:"Excel dosyalarınızı yükleyin";
+  updateHeaderPills();
+  if(v==="dashboard"&&results.length) buildDashboard();
+  if(v==="table"&&results.length) buildTable();
+  if(v==="order") buildOrder();
+}
+
+function updateSeasonInfo(){
+  const m=cm();
+  const phase=mc(m);
+  const icon=phase==="peak"?"🔥 Yoğun":phase==="shoulder"?"🌤 Geçiş":"❄️ Düşük";
+  document.getElementById("seasonInfo").innerHTML=`Sezon: Mar–Ara<br>Şu an: ${MONTHS_TR[m-1]} • ${icon}`;
+}
+
+function updateHeaderPills(){
+  const hp=document.getElementById("headerPills");
+  hp.innerHTML="";
+  if(results.length&&currentView!=="upload"){
+    const u=results.filter(r=>r.ps===3).length;
+    const m=results.filter(r=>r.ps===2).length;
+    hp.innerHTML=`<span class="pill" style="background:var(--red-bg);color:var(--red);">${u} Acil</span><span class="pill" style="background:var(--yellow-bg);color:var(--yellow);">${m} Orta</span>`;
+  }
+}
+
+/* ═══════════════ FILE UPLOAD ═══════════════ */
+function buildUploadBoxes(){
+  const c=document.getElementById("uploadBoxes");
+  const boxes=[
+    {key:"products",icon:"📦",title:"Ürün Listesi",desc:"Ürün kodu, adı, kategori, fiyat"},
+    {key:"sales",icon:"📈",title:"Satış Verileri",desc:"Sezon başından bugüne toplam satış"},
+    {key:"stock",icon:"📋",title:"Stok / Sipariş",desc:"Mevcut stok miktarları"},
+  ];
+  boxes.forEach(b=>{
+    const div=document.createElement("div");
+    div.className="upload-box"; div.id="box-"+b.key;
+    div.innerHTML=`<div class="ico">${b.icon}</div><div class="ttl">${b.title}</div><div class="desc">${b.desc}</div>`;
+    div.onclick=()=>pickFile(b.key);
+    div.ondragover=e=>{e.preventDefault();div.style.borderColor="var(--accent)";};
+    div.ondragleave=()=>{div.style.borderColor=fileNames[b.key]?"var(--green)":"var(--border)";};
+    div.ondrop=e=>{e.preventDefault();if(e.dataTransfer.files[0])loadFile(b.key,e.dataTransfer.files[0]);};
+    c.appendChild(div);
+  });
+}
+
+function pickFile(key){
+  const inp=document.createElement("input");
+  inp.type="file"; inp.accept=".xlsx,.xls,.csv";
+  inp.onchange=e=>{if(e.target.files[0])loadFile(key,e.target.files[0]);};
+  inp.click();
+}
+
+async function loadFile(key,file){
+  try{
+    const data=await parseExcel(file);
+    fileData[key]=data;
+    fileNames[key]=file.name;
+    const box=document.getElementById("box-"+key);
+    box.className="upload-box done";
+    box.querySelector(".ico").textContent="✅";
+    let fn=box.querySelector(".fname");
+    if(!fn){fn=document.createElement("div");fn.className="fname";box.appendChild(fn);}
+    fn.textContent=file.name;
+    if(key==="products"&&data.length) showPreview(data);
+    checkReady();
+  }catch(err){alert("Dosya okunamadı: "+err.message);}
+}
+
+function parseExcel(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+        res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+      }catch(err){rej(err);}
+    };
+    r.onerror=rej;
+    r.readAsArrayBuffer(file);
+  });
+}
+
+function showPreview(data){
+  const area=document.getElementById("previewArea");
+  const keys=Object.keys(data[0]).slice(0,5);
+  let html=`<div class="chart-card" style="margin-bottom:16px;"><div class="chart-card-title">📝 Ürün Listesi Önizleme (${data.length} satır)</div><div style="overflow-x:auto;"><table class="preview-table"><thead><tr>`;
+  keys.forEach(k=>{html+=`<th>${k}</th>`;});
+  html+=`</tr></thead><tbody>`;
+  data.slice(0,5).forEach(row=>{
+    html+=`<tr>`;
+    keys.forEach(k=>{html+=`<td>${row[k]||""}</td>`;});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table></div></div>`;
+  area.innerHTML=html;
+}
+
+function checkReady(){
+  const ready=fileData.products.length>0&&fileData.sales.length>0;
+  document.getElementById("btnAnalyze").disabled=!ready;
+  document.getElementById("btnAI").disabled=!ready;
+}
+
+/* ═══════════════ FIELD DETECT ═══════════════ */
+function findF(obj,cands){
+  for(const c of cands){
+    const k=Object.keys(obj).find(x=>x.toLowerCase().trim()===c.toLowerCase());
+    if(k&&obj[k]!==undefined) return obj[k];
+  }
+  return null;
+}
+function getCode(o){const v=findF(o,["ürün kodu","barkod","sku","kod","code","id"]);return v!==null?String(v).trim():String(Object.values(o)[0]||"").trim();}
+function getName(o){const v=findF(o,["ürün adı","ad","isim","name","açıklama"]);return v!==null?String(v):String(Object.values(o)[1]||"");}
+function getQty(o){const v=findF(o,["satış adedi","adet","miktar","toplam","satış","quantity","stok","sipariş","stock"]);return parseFloat(v)||0;}
+function getCat(o){const v=findF(o,["kategori","grup","category","tür"]);return v?String(v):"-";}
+function getPrice(o){const v=findF(o,["fiyat","birim fiyat","price","tutar"]);return parseFloat(v)||0;}
+
+/* ═══════════════ ANALYSIS ═══════════════ */
+function predict(sold,el,rem){
+  if(!el.length||!sold)return 0;
+  const ew=el.reduce((s,m)=>s+WT[mc(m)],0);
+  const fw=rem.reduce((s,m)=>s+WT[mc(m)],0);
+  return Math.round((sold/ew)*fw);
+}
+
+function runAnalysis(){
+  const el=elapsedM(), rem=remainM();
+  const sMap={}, stMap={};
+  fileData.sales.forEach(s=>{const k=getCode(s);sMap[k]=(sMap[k]||0)+getQty(s);});
+  fileData.stock.forEach(s=>{const k=getCode(s);stMap[k]=(stMap[k]||0)+getQty(s);});
+
+  results=fileData.products.map(p=>{
+    const code=getCode(p),name=getName(p),category=getCat(p),price=getPrice(p);
+    const totalSold=sMap[code]||0, stk=stMap[code]||0;
+    const pred=predict(totalSold,el,rem);
+    const needed=Math.max(0,pred-stk);
+    let priority="Düşük",ps=1;
+    if(totalSold>0&&needed>stk*2){priority="Acil";ps=3;}
+    else if(totalSold>0&&needed>0){priority="Orta";ps=2;}
+    else if(totalSold===0){priority="İzle";ps=0;}
+    return{code,name,category,price,totalSold,stock:stk,predicted:pred,needed,priority,ps};
+  });
+  results.sort((a,b)=>b.ps-a.ps||b.needed-a.needed);
+  switchView("dashboard");
+}
+
+/* ═══════════════ DASHBOARD ═══════════════ */
+function buildDashboard(){
+  const kg=document.getElementById("kpiGrid");
+  const urgent=results.filter(r=>r.ps===3).length;
+  const medium=results.filter(r=>r.ps===2).length;
+  const totalOrder=results.reduce((s,r)=>s+r.needed,0);
+  const zeroSales=results.filter(r=>r.totalSold===0).length;
+  kg.innerHTML=[
+    kpiHTML("Toplam Ürün",results.length,"📦",""),
+    kpiHTML("Acil Sipariş",urgent,"🚨","var(--red)"),
+    kpiHTML("Orta Öncelik",medium,"⚡","var(--yellow)"),
+    kpiHTML("Toplam Sipariş",totalOrder.toLocaleString(),"🛒","var(--accent)"),
+    kpiHTML("Kalan Sezon",remainM().length+" ay","📅","var(--green)"),
+    kpiHTML("Satış Yok",zeroSales,"⚠️","var(--dim)"),
+  ].join("");
+
+  const cg=document.getElementById("chartsGrid");
+  cg.innerHTML=`
+    <div class="chart-card"><div class="chart-card-title">Kategori Bazlı Satış & Sipariş</div><div class="chart-wrap"><canvas id="chartCat"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Öncelik Dağılımı</div><div class="chart-wrap"><canvas id="chartPie"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Sezon Yoğunluk Haritası</div><div class="chart-wrap"><canvas id="chartSeason"></canvas></div></div>
+  `;
+  setTimeout(()=>{buildCategoryChart();buildPieChart();buildSeasonChart();},50);
+
+  // Top 10
+  const top10=results.filter(r=>r.totalSold>0).slice(0,10);
+  if(top10.length){
+    document.getElementById("topTableCard").style.display="block";
+    const t=document.getElementById("topTable");
+    t.innerHTML=`<thead><tr>${["#","Ürün","Kod","Satış","Stok","Tahmin","Sipariş","Öncelik"].map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${top10.map((r,i)=>`<tr>
+      <td style="color:var(--dim);font-weight:700;">${i+1}</td>
+      <td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.name}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--dim);">${r.code}</td>
+      <td style="color:var(--green);font-weight:700;">${r.totalSold}</td>
+      <td>${r.stock}</td>
+      <td style="color:var(--accent);">${r.predicted}</td>
+      <td style="font-weight:800;color:${r.needed>0?"var(--accent)":"var(--dim)"};font-size:15px;">${r.needed}</td>
+      <td>${badgeHTML(r)}</td>
+    </tr>`).join("")}</tbody>`;
+  }
+}
+
+function kpiHTML(label,value,icon,color){
+  return `<div class="kpi"><div class="kpi-top"><span class="kpi-label">${label}</span><span class="kpi-icon">${icon}</span></div><div class="kpi-value" style="color:${color||"var(--text)"}">${value}</div></div>`;
+}
+function badgeHTML(r){
+  const cls=r.ps===3?"badge-red":r.ps===2?"badge-yellow":r.ps===1?"badge-green":"badge-gray";
+  return `<span class="badge ${cls}">${r.priority}</span>`;
+}
+
+function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}}
+
+function buildCategoryChart(){
+  destroyChart("cat");
+  const groups={};
+  results.forEach(r=>{
+    const c=r.category==="-"?"Diğer":r.category;
+    if(!groups[c])groups[c]={sales:0,order:0};
+    groups[c].sales+=r.totalSold; groups[c].order+=r.needed;
+  });
+  const labels=Object.keys(groups).slice(0,8);
+  chartInstances.cat=new Chart(document.getElementById("chartCat"),{
+    type:"bar",
+    data:{labels,datasets:[
+      {label:"Satış",data:labels.map(l=>groups[l].sales),backgroundColor:"#34d399",borderRadius:4},
+      {label:"Sipariş",data:labels.map(l=>groups[l].order),backgroundColor:"#e8723a",borderRadius:4},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#9ca0b0",font:{family:"Outfit"}}}},scales:{x:{ticks:{color:"#6b7084",font:{size:11}}},y:{ticks:{color:"#6b7084",font:{size:11}},grid:{color:"#262a36"}}}}
+  });
+}
+
+function buildPieChart(){
+  destroyChart("pie");
+  const d=[
+    {l:"Acil",v:results.filter(r=>r.ps===3).length,c:"#f87171"},
+    {l:"Orta",v:results.filter(r=>r.ps===2).length,c:"#fbbf24"},
+    {l:"Düşük",v:results.filter(r=>r.ps===1).length,c:"#34d399"},
+    {l:"İzle",v:results.filter(r=>r.ps===0).length,c:"#6b7084"},
+  ].filter(x=>x.v>0);
+  chartInstances.pie=new Chart(document.getElementById("chartPie"),{
+    type:"doughnut",
+    data:{labels:d.map(x=>x.l),datasets:[{data:d.map(x=>x.v),backgroundColor:d.map(x=>x.c),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:"55%",plugins:{legend:{position:"bottom",labels:{color:"#9ca0b0",font:{family:"Outfit"},padding:16}}}}
+  });
+}
+
+function buildSeasonChart(){
+  destroyChart("season");
+  const labels=SEASON.map(m=>MONTHS_TR[m-1]);
+  const weights=SEASON.map(m=>WT[mc(m)]);
+  const colors=SEASON.map(m=>mc(m)==="peak"?"#f87171":mc(m)==="shoulder"?"#fbbf24":"#34d399");
+  chartInstances.season=new Chart(document.getElementById("chartSeason"),{
+    type:"bar",
+    data:{labels,datasets:[{label:"Ağırlık",data:weights,backgroundColor:colors,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#6b7084",font:{size:11}}},y:{ticks:{color:"#6b7084",font:{size:11}},grid:{color:"#262a36"}}}}
+  });
+}
+
+/* ═══════════════ TABLE ═══════════════ */
+let tFilter="all", tCat="all", tSearch="", tSort="ps", tDir="desc";
+
+function buildTable(){
+  const fb=document.getElementById("filterBar");
+  const cats=["all",...[...new Set(results.map(r=>r.category))].filter(c=>c!=="-")];
+  fb.innerHTML=`
+    <input placeholder="🔍 Ürün ara..." id="tSearch" oninput="tSearch=this.value;renderTable();">
+    <select id="tFilterSel" onchange="tFilter=this.value;renderTable();">
+      <option value="all">Tüm Öncelikler</option><option value="urgent">🚨 Acil</option><option value="medium">⚡ Orta</option><option value="low">✅ Düşük</option><option value="zero">⚠️ Satış Yok</option>
+    </select>
+    <select id="tCatSel" onchange="tCat=this.value;renderTable();">
+      ${cats.map(c=>`<option value="${c}">${c==="all"?"Tüm Kategoriler":c}</option>`).join("")}
+    </select>
+    <span id="tCount" style="margin-left:auto;font-size:12px;color:var(--dim);"></span>
+  `;
+  renderTable();
+}
+
+function renderTable(){
+  let d=results.filter(r=>{
+    if(tFilter==="urgent"&&r.ps!==3)return false;
+    if(tFilter==="medium"&&r.ps!==2)return false;
+    if(tFilter==="low"&&r.ps<=1)return false;
+    if(tFilter==="zero"&&r.totalSold!==0)return false;
+    if(tCat!=="all"&&r.category!==tCat)return false;
+    if(tSearch){const q=tSearch.toLowerCase();if(!r.name.toLowerCase().includes(q)&&!r.code.toLowerCase().includes(q))return false;}
+    return true;
+  });
+  d.sort((a,b)=>{
+    let av=a[tSort],bv=b[tSort];
+    if(typeof av==="string")return tDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
+    return tDir==="asc"?av-bv:bv-av;
+  });
+  document.getElementById("tCount").textContent=d.length+" ürün";
+  const cols=[
+    {k:"name",l:"Ürün"},{k:"code",l:"Kod"},{k:"category",l:"Kategori"},
+    {k:"totalSold",l:"Satış"},{k:"stock",l:"Stok"},{k:"predicted",l:"Tahmin"},
+    {k:"needed",l:"Sipariş"},{k:"ps",l:"Öncelik"}
+  ];
+  const t=document.getElementById("fullTable");
+  const show=d.slice(0,100);
+  t.innerHTML=`<thead><tr>${cols.map(c=>`<th onclick="tSort='${c.k}';tDir=tDir==='desc'?'asc':'desc';renderTable();">${c.l}${tSort===c.k?(tDir==="desc"?" ↓":" ↑"):""}</th>`).join("")}</tr></thead>
+  <tbody>${show.map((r,i)=>`<tr>
+    <td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.name}</td>
+    <td style="font-family:monospace;font-size:11px;color:var(--dim);">${r.code}</td>
+    <td style="color:var(--mid);">${r.category}</td>
+    <td style="color:var(--green);font-weight:600;">${r.totalSold}</td>
+    <td>${r.stock}</td>
+    <td style="color:var(--accent);">${r.predicted}</td>
+    <td style="font-weight:800;color:${r.needed>0?"var(--accent)":"var(--dim)"};font-size:15px;">${r.needed}</td>
+    <td>${badgeHTML(r)}</td>
+  </tr>`).join("")}</tbody>`;
+  const tf=document.getElementById("tableFooter");
+  if(d.length>100){tf.style.display="block";tf.textContent=`İlk 100 ürün gösteriliyor (toplam ${d.length})`;}
+  else tf.style.display="none";
+}
+
+/* ═══════════════ AI AGENT ═══════════════ */
+async function runAI(){
+  if(!results.length)return;
+  const btn=document.getElementById("btnAI");
+  const loading=document.getElementById("aiLoading");
+  const result=document.getElementById("aiResult");
+  btn.disabled=true; btn.textContent="⏳ AI düşünüyor...";
+  loading.style.display="flex"; result.style.display="none";
+
+  const top=results.filter(r=>r.totalSold>0).slice(0,5);
+  const urgent=results.filter(r=>r.ps===3).slice(0,5);
+  const groups={};
+  results.forEach(r=>{const c=r.category;if(!groups[c])groups[c]={count:0,sales:0};groups[c].count++;groups[c].sales+=r.totalSold;});
+
+  const prompt=`Sen bir market sipariş danışmanısın. Turizm bölgesinde sezonluk çalışan bir market için sipariş analizi yap.
+
+SEZON: Mart-Aralık. Yaz (Haz-Ağu) yoğun turizm sezonu. Şu an: ${MONTHS_TR[cm()-1]}.
+Sezon durumu: ${mc(cm())==="peak"?"YOĞUN SEZON":mc(cm())==="shoulder"?"GEÇİŞ DÖNEMİ":"DÜŞÜK SEZON"}
+Kalan aylar: ${remainM().map(m=>MONTHS_TR[m-1]).join(", ")}
+
+VERİLER:
+- Toplam ${results.length} ürün
+- ${results.filter(r=>r.ps===3).length} ACİL, ${results.filter(r=>r.ps===2).length} orta öncelikli
+- ${results.filter(r=>r.totalSold===0).length} ürün hiç satılmamış
+- Toplam ${results.reduce((s,r)=>s+r.needed,0)} adet sipariş önerisi
+
+EN ÇOK SATANLAR:
+${top.map(r=>`• ${r.name} (${r.code}): ${r.totalSold} satış, stok: ${r.stock}, tahmin: ${r.predicted}, sipariş: ${r.needed}`).join("\n")}
+
+ACİL SİPARİŞ:
+${urgent.map(r=>`• ${r.name}: stok ${r.stock}, tahmin ${r.predicted}, sipariş ${r.needed}`).join("\n")}
+
+KATEGORİ DAĞILIMI:
+${Object.entries(groups).map(([c,d])=>`• ${c}: ${d.count} ürün, satış: ${d.sales}`).join("\n")}
+
+Analiz et:
+1. Genel sipariş stratejisi
+2. Odaklanılacak kategoriler
+3. Sezon uyarıları
+4. Stok tükenme riski
+5. Satılmayan ürünler
+6. Turizm sezonu tavsiyeleri
+
+Türkçe, kısa, net. Emoji kullan.`;
+
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})
+    });
+    const data=await res.json();
+    const text=data.content?.map(c=>c.text||"").join("\n")||"Yanıt alınamadı.";
+    result.textContent=text;
+    result.style.display="block";
+  }catch(err){
+    result.textContent="⚠️ AI bağlantı hatası: "+err.message;
+    result.style.display="block";
+  }
+  loading.style.display="none";
+  btn.disabled=false; btn.textContent="🧠 AI Analizi Çalıştır";
+}
+
+/* ═══════════════ ORDER ═══════════════ */
+function buildOrder(){
+  const orders=results.filter(r=>r.needed>0);
+  const kg=document.getElementById("orderKpi");
+  const tc=document.getElementById("orderTableCard");
+  const ex=document.getElementById("btnExport");
+  const em=document.getElementById("orderEmpty");
+
+  if(!orders.length){
+    kg.innerHTML=""; tc.style.display="none"; ex.style.display="none"; em.style.display="block";
+    return;
+  }
+  em.style.display="none"; tc.style.display="block"; ex.style.display="inline-flex";
+  kg.innerHTML=[
+    kpiHTML("Sipariş Kalemi",orders.length,"📦","var(--accent)"),
+    kpiHTML("Toplam Adet",orders.reduce((s,r)=>s+r.needed,0).toLocaleString(),"🛒","var(--accent)"),
+    kpiHTML("Acil Kalem",orders.filter(r=>r.ps===3).length,"🚨","var(--red)"),
+  ].join("");
+
+  const t=document.getElementById("orderTable");
+  t.innerHTML=`<thead><tr>${["#","Ürün","Kod","Kategori","Satış","Tahmin","Sipariş","Öncelik"].map(h=>`<th>${h}</th>`).join("")}</tr></thead>
+  <tbody>${orders.map((r,i)=>`<tr>
+    <td style="color:var(--dim);">${i+1}</td>
+    <td style="font-weight:600;">${r.name}</td>
+    <td style="font-family:monospace;font-size:11px;color:var(--dim);">${r.code}</td>
+    <td style="color:var(--mid);">${r.category}</td>
+    <td style="color:var(--green);">${r.totalSold}</td>
+    <td style="color:var(--accent);">${r.predicted}</td>
+    <td style="font-weight:800;color:var(--accent);font-size:16px;">${r.needed}</td>
+    <td>${badgeHTML(r)}</td>
+  </tr>`).join("")}</tbody>`;
+}
+
+function exportOrder(){
+  const orders=results.filter(r=>r.needed>0);
+  const ws=XLSX.utils.json_to_sheet(orders.map(d=>({
+    "Ürün Kodu":d.code,"Ürün Adı":d.name,"Kategori":d.category,
+    "Toplam Satış":d.totalSold,"Stok":d.stock,"Tahmin":d.predicted,
+    "Sipariş Önerisi":d.needed,"Öncelik":d.priority
+  })));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Sipariş");
+  XLSX.writeFile(wb,`siparis_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+init();
+</script>
+</body>
+</html>
