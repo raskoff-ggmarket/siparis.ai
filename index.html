@@ -278,6 +278,17 @@ details[open] summary { color:var(--mid); }
 }
 .sec-card-title { font-family:var(--display); font-weight:700; font-size:16px; margin-bottom:16px; }
 
+/* ─── CHART GRID ─── */
+.chart-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:16px;
+}
+.chart-card {
+  background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px;
+}
+.chart-card-title { font-family:var(--display); font-weight:700; font-size:14px; margin-bottom:14px; color:var(--text); }
+.chart-wrap { position:relative; width:100%; height:260px; }
+.chart-wrap-tall { position:relative; width:100%; height:340px; }
+
 /* ─── FILTER BAR ─── */
 .filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
 .filter-bar input, .filter-bar select {
@@ -405,6 +416,7 @@ details[open] summary { color:var(--mid); }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 /* ══════════════════════════════════════════
    NAV CONFIG
@@ -1052,11 +1064,146 @@ function renderDashboard() {
       </div>
     </div>` : '';
 
+  const chartsHtml = `
+    <div class="chart-grid" id="chartGrid">
+      <div class="chart-card">
+        <div class="chart-card-title">🎯 Öncelik Dağılımı</div>
+        <div class="chart-wrap"><canvas id="chartPriority"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-title">📂 Kategori Bazlı Satış</div>
+        <div class="chart-wrap"><canvas id="chartCategory"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-card" style="margin-bottom:16px;">
+      <div class="chart-card-title">🏆 En Çok Satan 10 Ürün</div>
+      <div class="chart-wrap-tall"><canvas id="chartTop10"></canvas></div>
+    </div>`;
+
   document.getElementById('dashContent').innerHTML =
-    `<div style="margin-bottom:6px;font-size:12px;color:var(--dim);">
+    `<div style="margin-bottom:14px;font-size:12px;color:var(--dim);">
       📅 Analiz: <strong style="color:var(--mid)">${mNames[today.getMonth()+1]} ${today.getDate()}</strong>
       · Mart 1'den bu yana <strong style="color:var(--mid)">${S.elapsedDays} gün</strong> satış verisi
-    </div>` + statsHtml + top10Html + catHtml;
+    </div>` + statsHtml + chartsHtml + top10Html + catHtml;
+
+  // Build charts after DOM is updated
+  requestAnimationFrame(() => buildCharts());
+}
+
+/* ══════════════════════════════════════════
+   CHARTS  (Chart.js)
+══════════════════════════════════════════ */
+const CHART_INSTANCES = {};
+
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color:'#9ca0b0', font:{ family:'Outfit', size:12 }, padding:14 } },
+    tooltip: { backgroundColor:'#1e2130', titleColor:'#e4e0d8', bodyColor:'#9ca0b0', borderColor:'#262a36', borderWidth:1 },
+  },
+  scales: {
+    x: { ticks:{ color:'#6b7084', font:{ size:11 } }, grid:{ color:'#1e2130' } },
+    y: { ticks:{ color:'#6b7084', font:{ size:11 } }, grid:{ color:'#1e2130' } },
+  },
+};
+
+function destroyChart(id) {
+  if (CHART_INSTANCES[id]) { CHART_INSTANCES[id].destroy(); delete CHART_INSTANCES[id]; }
+}
+
+function buildCharts() {
+  buildPriorityChart();
+  buildCategoryChart();
+  buildTop10Chart();
+}
+
+function buildPriorityChart() {
+  destroyChart('priority');
+  const r = S.results;
+  const data = [
+    { label:'ACİL',   color:'#f87171', count: r.filter(x=>x.priority==='ACİL').length   },
+    { label:'YÜKSEK', color:'#fb923c', count: r.filter(x=>x.priority==='YÜKSEK').length },
+    { label:'ORTA',   color:'#fbbf24', count: r.filter(x=>x.priority==='ORTA').length   },
+    { label:'DÜŞÜK',  color:'#34d399', count: r.filter(x=>x.priority==='DÜŞÜK').length  },
+    { label:'İZLE',   color:'#6b7084', count: r.filter(x=>x.priority==='İZLE').length   },
+  ].filter(d => d.count > 0);
+
+  const ctx = document.getElementById('chartPriority');
+  if (!ctx) return;
+  CHART_INSTANCES.priority = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d.label),
+      datasets: [{ data: data.map(d => d.count), backgroundColor: data.map(d => d.color), borderWidth: 0, hoverOffset: 6 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: {
+        legend: { position:'right', labels:{ color:'#9ca0b0', font:{ family:'Outfit', size:12 }, padding:14 } },
+        tooltip: CHART_DEFAULTS.plugins.tooltip,
+      },
+    },
+  });
+}
+
+function buildCategoryChart() {
+  destroyChart('category');
+  const catMap = {};
+  S.results.forEach(p => {
+    const c = p.category === '-' ? 'Diğer' : p.category;
+    if (!catMap[c]) catMap[c] = { sales:0, order:0 };
+    catMap[c].sales += p.totalSales;
+    catMap[c].order += p.orderQty;
+  });
+  const top = Object.entries(catMap).sort((a,b) => b[1].sales - a[1].sales).slice(0, 8);
+  const labels = top.map(([c]) => c.length > 16 ? c.slice(0,14)+'…' : c);
+
+  const ctx = document.getElementById('chartCategory');
+  if (!ctx) return;
+  CHART_INSTANCES.category = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Satış', data: top.map(([,d]) => d.sales), backgroundColor:'#34d399', borderRadius:4 },
+        { label:'Sipariş', data: top.map(([,d]) => d.order), backgroundColor:'#e8723a', borderRadius:4 },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins, legend:{ ...CHART_DEFAULTS.plugins.legend, position:'top' } },
+    },
+  });
+}
+
+function buildTop10Chart() {
+  destroyChart('top10');
+  const top10 = S.results.filter(x => x.totalSales > 0)
+    .slice().sort((a,b) => b.totalSales - a.totalSales).slice(0, 10);
+  const labels = top10.map(p => p.name.length > 22 ? p.name.slice(0,20)+'…' : p.name);
+
+  const ctx = document.getElementById('chartTop10');
+  if (!ctx) return;
+  CHART_INSTANCES.top10 = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Toplam Satış', data: top10.map(p => p.totalSales), backgroundColor:'#818cf8', borderRadius:4 },
+        { label:'Sipariş Önerisi', data: top10.map(p => p.orderQty), backgroundColor:'#e8723a', borderRadius:4 },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      indexAxis: 'y',
+      plugins: { ...CHART_DEFAULTS.plugins, legend:{ ...CHART_DEFAULTS.plugins.legend, position:'top' } },
+      scales: {
+        x: { ticks:{ color:'#6b7084', font:{ size:11 } }, grid:{ color:'#1e2130' } },
+        y: { ticks:{ color:'#9ca0b0', font:{ size:11 } }, grid:{ color:'#1e2130' } },
+      },
+    },
+  });
 }
 
 /* ══════════════════════════════════════════
