@@ -227,6 +227,68 @@ details[open] summary { color:var(--mid); }
 .placeholder .p-ico { font-size:48px; margin-bottom:16px; }
 .placeholder .p-txt { font-size:14px; line-height:1.7; }
 
+/* ─── STAT CARDS ─── */
+.stat-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; margin-bottom:24px;
+}
+.stat-card {
+  background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 16px;
+}
+.stat-card .s-label {
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:8px;
+}
+.stat-card .s-value {
+  font-family:var(--display); font-size:28px; font-weight:900; line-height:1;
+}
+.stat-card .s-sub { font-size:11px; color:var(--dim); margin-top:5px; }
+
+/* ─── RISK BADGE ─── */
+.risk {
+  display:inline-block; padding:3px 9px; border-radius:7px; font-size:11px; font-weight:700; white-space:nowrap;
+}
+.risk-critical { background:var(--red-bg);    color:var(--red);    }
+.risk-high     { background:rgba(251,146,60,0.12); color:#fb923c; }
+.risk-medium   { background:var(--yellow-bg); color:var(--yellow); }
+.risk-low      { background:var(--green-bg);  color:var(--green);  }
+.risk-none     { background:rgba(255,255,255,0.04); color:var(--dim); }
+
+/* ─── DATA TABLE ─── */
+.tbl-wrap { overflow-x:auto; }
+.data-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.data-tbl th {
+  padding:11px 12px; text-align:left; color:var(--dim); border-bottom:2px solid var(--border);
+  font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.7px;
+  cursor:pointer; user-select:none; white-space:nowrap;
+}
+.data-tbl th:hover { color:var(--mid); }
+.data-tbl th.sort-asc::after  { content:' ↑'; color:var(--accent); }
+.data-tbl th.sort-desc::after { content:' ↓'; color:var(--accent); }
+.data-tbl td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.data-tbl tr:hover td { background:rgba(255,255,255,0.015); }
+.data-tbl tr:last-child td { border-bottom:none; }
+.td-code { font-family:monospace; font-size:11px; color:var(--dim); }
+.td-name { font-weight:600; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.td-num  { font-variant-numeric:tabular-nums; }
+.td-order { font-weight:800; font-size:15px; color:var(--accent); }
+.td-zero  { color:var(--dim); }
+
+/* ─── SECTION CARD ─── */
+.sec-card {
+  background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; margin-bottom:16px;
+}
+.sec-card-title { font-family:var(--display); font-weight:700; font-size:16px; margin-bottom:16px; }
+
+/* ─── FILTER BAR ─── */
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+.filter-bar input, .filter-bar select {
+  padding:9px 14px; border-radius:10px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.03); color:var(--text); font-family:var(--font); font-size:13px; outline:none;
+  transition:border-color .15s;
+}
+.filter-bar input:focus, .filter-bar select:focus { border-color:var(--accent); }
+.filter-bar input { min-width:200px; }
+.filter-count { margin-left:auto; font-size:12px; color:var(--dim); white-space:nowrap; }
+
 /* ─── RESPONSIVE ─── */
 @media (max-width:900px) {
   .sidebar { display:none !important; }
@@ -303,19 +365,23 @@ details[open] summary { color:var(--mid); }
       </div>
     </div>
 
-    <!-- ══ DASHBOARD placeholder ══ -->
+    <!-- ══ DASHBOARD ══ -->
     <div class="section" id="sec-dashboard">
-      <div class="placeholder">
-        <div class="p-ico">📊</div>
-        <div class="p-txt">Dashboard — Adım 2'de eklenecek</div>
+      <div id="dashContent">
+        <div class="placeholder">
+          <div class="p-ico">📊</div>
+          <div class="p-txt">Analiz başlatılmadı.<br>Dosya Yükleme ekranından dosyaları yükleyin.</div>
+        </div>
       </div>
     </div>
 
-    <!-- ══ TABLE placeholder ══ -->
+    <!-- ══ TABLE ══ -->
     <div class="section" id="sec-table">
-      <div class="placeholder">
-        <div class="p-ico">📋</div>
-        <div class="p-txt">Ürün Detay Tablosu — Adım 2'de eklenecek</div>
+      <div id="tableContent">
+        <div class="placeholder">
+          <div class="p-ico">📋</div>
+          <div class="p-txt">Ürün Detay Tablosu — analiz sonrası görünür.</div>
+        </div>
       </div>
     </div>
 
@@ -771,10 +837,350 @@ function checkReady() {
 }
 
 /* ══════════════════════════════════════════
-   START ANALYSIS  →  Adım 2'de doldurulacak
+   ANALYSIS ENGINE
 ══════════════════════════════════════════ */
 function startAnalysis() {
-  switchView('dashboard');
+  const btn = document.getElementById('btnAnalyze');
+  btn.disabled = true;
+  btn.textContent = '⏳ Hesaplanıyor...';
+  setTimeout(() => {
+    try {
+      runAnalysis();
+      renderDashboard();
+      renderTable();
+      switchView('dashboard');
+    } catch (err) {
+      alert('Analiz hatası: ' + err.message);
+      console.error(err);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Analizi Başlat';
+  }, 30);
+}
+
+function runAnalysis() {
+  // Elapsed days from March 1 of current year to today
+  const today      = new Date();
+  const seasonStart = new Date(today.getFullYear(), 2, 1); // March 1
+  const elapsedDays = Math.max(1, Math.round((today - seasonStart) / 86400000));
+  S.elapsedDays = elapsedDays;
+
+  // Build lookup maps
+  const salesMap = buildQtyMap('sales');
+  const stockMap = S.files.stock ? buildQtyMap('stock') : {};
+
+  // Process products
+  S.results = S.files.products.map(row => {
+    const code     = rowVal(row, S.maps.products.code);
+    const name     = rowVal(row, S.maps.products.name)     || code;
+    const category = rowVal(row, S.maps.products.category) || '-';
+    const price    = parseNum(rowVal(row, S.maps.products.price));
+
+    // Match by exact code first, then try trimmed / numeric comparison
+    const totalSales   = lookupCode(salesMap, code);
+    const currentStock = lookupCode(stockMap, code);
+
+    const dailyAvg   = totalSales / elapsedDays;
+    const forecast15 = Math.ceil(dailyAvg * 15);
+    const orderQty   = Math.max(0, forecast15 - currentStock);
+
+    // Days of stock remaining (null = infinite, no sales)
+    const stockDays = dailyAvg > 0 ? Math.round(currentStock / dailyAvg) : null;
+
+    // Excess stock: stock > 30-day demand
+    const excessStock = dailyAvg > 0 && currentStock > dailyAvg * 30;
+
+    // Priority based on stockDays
+    let priority, riskClass;
+    if (totalSales === 0) {
+      priority = 'İZLE';     riskClass = 'none';
+    } else if (stockDays !== null && stockDays <= 5) {
+      priority = 'ACİL';    riskClass = 'critical';
+    } else if (stockDays !== null && stockDays <= 10) {
+      priority = 'YÜKSEK';  riskClass = 'high';
+    } else if (stockDays !== null && stockDays <= 15) {
+      priority = 'ORTA';    riskClass = 'medium';
+    } else {
+      priority = 'DÜŞÜK';   riskClass = 'low';
+    }
+
+    return {
+      code, name, category, price,
+      totalSales, currentStock,
+      dailyAvg: Math.round(dailyAvg * 100) / 100,
+      forecast15, orderQty,
+      stockDays, excessStock,
+      priority, riskClass,
+    };
+  });
+
+  // Sort: priority order, then by orderQty desc
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
+  S.results.sort((a, b) =>
+    (PO[a.priority] - PO[b.priority]) || (b.orderQty - a.orderQty)
+  );
+}
+
+// Sum qty values per product code from a file
+function buildQtyMap(fileKey) {
+  const map  = {};
+  const rows = S.files[fileKey] || [];
+  const cm   = S.maps[fileKey];
+  if (!cm || cm.code === '__none__' || cm.qty === '__none__') return map;
+  rows.forEach(row => {
+    const code = String(row[cm.code] ?? '').trim();
+    const qty  = parseNum(row[cm.qty]);
+    if (code) map[code] = (map[code] || 0) + qty;
+  });
+  return map;
+}
+
+// Lookup with fallback: exact string, then numeric
+function lookupCode(map, code) {
+  if (map[code] !== undefined) return map[code];
+  // Try numeric match (e.g. "001" == "1")
+  const numCode = String(parseFloat(code));
+  if (map[numCode] !== undefined) return map[numCode];
+  // Try all keys where numeric value matches
+  for (const k of Object.keys(map)) {
+    if (String(parseFloat(k)) === numCode) return map[k];
+  }
+  return 0;
+}
+
+function rowVal(row, col) {
+  if (!col || col === '__none__') return '';
+  return String(row[col] ?? '').trim();
+}
+function parseNum(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
+
+/* ══════════════════════════════════════════
+   DASHBOARD RENDER  (charts added in Adım 3)
+══════════════════════════════════════════ */
+function renderDashboard() {
+  const r   = S.results;
+  const cnt = (p) => r.filter(x => x.priority === p).length;
+  const totalOrder = r.reduce((s, x) => s + x.orderQty, 0);
+  const deadStock  = r.filter(x => x.totalSales === 0).length;
+  const avgDays    = (() => {
+    const vals = r.filter(x => x.stockDays !== null).map(x => x.stockDays);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+  })();
+
+  const mNames = ['','Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const today  = new Date();
+  const seasonEnd = new Date(today.getFullYear(), 10, 30);
+  const daysLeft  = Math.max(0, Math.round((seasonEnd - today) / 86400000));
+
+  const statCards = [
+    { label:'Toplam Ürün',         value:r.length,               color:'',                  sub:`${S.elapsedDays} gün veri` },
+    { label:'Acil Sipariş',        value:cnt('ACİL'),             color:'var(--red)',        sub:'stok < 5 gün' },
+    { label:'Yüksek Öncelik',      value:cnt('YÜKSEK'),           color:'#fb923c',           sub:'stok 5–10 gün' },
+    { label:'Sipariş Kalemi',      value:r.filter(x=>x.orderQty>0).length, color:'var(--accent)', sub:'sipariş önerisi > 0' },
+    { label:'Toplam Sipariş Adedi',value:totalOrder.toLocaleString('tr'), color:'var(--accent)', sub:'15 günlük tahmin' },
+    { label:'Ölü Stok',            value:deadStock,               color:'var(--dim)',        sub:'hiç satış yok' },
+    { label:'Ort. Stok Günü',      value:avgDays,                 color:'var(--green)',      sub:'mevcut stok dayanma' },
+    { label:'Sezonda Kalan',       value:daysLeft + ' gün',       color:'var(--purple)',     sub:'Kasım sonuna kadar' },
+  ];
+
+  const statsHtml = `<div class="stat-grid">${
+    statCards.map(s => `
+      <div class="stat-card">
+        <div class="s-label">${s.label}</div>
+        <div class="s-value" style="color:${s.color || 'var(--text)'}">${s.value}</div>
+        <div class="s-sub">${s.sub}</div>
+      </div>`).join('')
+  }</div>`;
+
+  // Top 10 best sellers
+  const top10 = r.filter(x => x.totalSales > 0)
+    .slice().sort((a, b) => b.totalSales - a.totalSales).slice(0, 10);
+
+  const top10Html = top10.length ? `
+    <div class="sec-card">
+      <div class="sec-card-title">🏆 En Çok Satan 10 Ürün</div>
+      <div class="tbl-wrap">
+        <table class="data-tbl">
+          <thead><tr>
+            <th>#</th><th>Ürün Adı</th><th>Kod</th><th>Kategori</th>
+            <th>Top. Satış</th><th>Günlük Ort.</th><th>Stok</th><th>Sipariş</th><th>Öncelik</th>
+          </tr></thead>
+          <tbody>${top10.map((p, i) => `<tr>
+            <td style="color:var(--dim);font-weight:700;">${i + 1}</td>
+            <td class="td-name">${esc(p.name)}</td>
+            <td class="td-code">${esc(p.code)}</td>
+            <td style="color:var(--mid)">${esc(p.category)}</td>
+            <td class="td-num" style="color:var(--green);font-weight:600">${p.totalSales}</td>
+            <td class="td-num" style="color:var(--mid)">${p.dailyAvg}</td>
+            <td class="td-num">${p.currentStock}</td>
+            <td class="${p.orderQty > 0 ? 'td-order' : 'td-zero'}">${p.orderQty > 0 ? p.orderQty : '—'}</td>
+            <td><span class="risk risk-${p.riskClass}">${p.priority}</span></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : '';
+
+  // Category summary
+  const catMap = {};
+  r.forEach(p => {
+    const c = p.category === '-' ? 'Diğer' : p.category;
+    if (!catMap[c]) catMap[c] = { count:0, sales:0, order:0, dead:0 };
+    catMap[c].count++;
+    catMap[c].sales += p.totalSales;
+    catMap[c].order += p.orderQty;
+    if (p.totalSales === 0) catMap[c].dead++;
+  });
+  const catRows = Object.entries(catMap)
+    .sort((a, b) => b[1].sales - a[1].sales).slice(0, 15);
+
+  const catHtml = catRows.length > 1 ? `
+    <div class="sec-card">
+      <div class="sec-card-title">📂 Kategori Özeti</div>
+      <div class="tbl-wrap">
+        <table class="data-tbl">
+          <thead><tr>
+            <th>Kategori</th><th>Ürün Sayısı</th><th>Toplam Satış</th><th>Sipariş Önerisi</th><th>Ölü Stok</th>
+          </tr></thead>
+          <tbody>${catRows.map(([cat, d]) => `<tr>
+            <td style="font-weight:600">${esc(cat)}</td>
+            <td class="td-num" style="color:var(--mid)">${d.count}</td>
+            <td class="td-num" style="color:var(--green);font-weight:600">${d.sales.toLocaleString('tr')}</td>
+            <td class="${d.order > 0 ? 'td-order' : 'td-zero'}">${d.order > 0 ? d.order.toLocaleString('tr') : '—'}</td>
+            <td class="td-num" style="color:${d.dead > 0 ? 'var(--red)' : 'var(--dim)'}">${d.dead || '—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : '';
+
+  document.getElementById('dashContent').innerHTML =
+    `<div style="margin-bottom:6px;font-size:12px;color:var(--dim);">
+      📅 Analiz: <strong style="color:var(--mid)">${mNames[today.getMonth()+1]} ${today.getDate()}</strong>
+      · Mart 1'den bu yana <strong style="color:var(--mid)">${S.elapsedDays} gün</strong> satış verisi
+    </div>` + statsHtml + top10Html + catHtml;
+}
+
+/* ══════════════════════════════════════════
+   TABLE RENDER  (full detail view)
+══════════════════════════════════════════ */
+let tSort = 'priority', tDir = 'asc', tFilter = 'all', tCat = 'all', tSearch = '';
+
+function renderTable() {
+  const cats = [...new Set(S.results.map(r => r.category))].filter(c => c !== '-').sort();
+
+  const filterHtml = `
+    <div class="filter-bar" id="filterBar">
+      <input id="tSearch" placeholder="🔍 Ürün adı veya kod..." oninput="tSearch=this.value;applyTableFilter()">
+      <select id="tPrio" onchange="tFilter=this.value;applyTableFilter()">
+        <option value="all">Tüm Öncelikler</option>
+        <option value="ACİL">🔴 Acil</option>
+        <option value="YÜKSEK">🟠 Yüksek</option>
+        <option value="ORTA">🟡 Orta</option>
+        <option value="DÜŞÜK">🟢 Düşük</option>
+        <option value="İZLE">⚫ İzle</option>
+        <option value="order">Sipariş Önerisi > 0</option>
+      </select>
+      <select id="tCatSel" onchange="tCat=this.value;applyTableFilter()">
+        <option value="all">Tüm Kategoriler</option>
+        ${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
+      <span class="filter-count" id="filterCount"></span>
+    </div>
+    <div id="tableWrap"></div>`;
+
+  document.getElementById('tableContent').innerHTML = filterHtml;
+  applyTableFilter();
+}
+
+function applyTableFilter() {
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
+  let data = S.results.filter(r => {
+    if (tFilter === 'order' && r.orderQty <= 0) return false;
+    if (tFilter !== 'all' && tFilter !== 'order' && r.priority !== tFilter) return false;
+    if (tCat !== 'all' && r.category !== tCat) return false;
+    if (tSearch) {
+      const q = tSearch.toLowerCase();
+      if (!r.name.toLowerCase().includes(q) && !r.code.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Sort
+  data = data.slice().sort((a, b) => {
+    let av = a[tSort], bv = b[tSort];
+    if (tSort === 'priority') { av = PO[a.priority]; bv = PO[b.priority]; }
+    if (tSort === 'stockDays') {
+      av = a.stockDays === null ? 9999 : a.stockDays;
+      bv = b.stockDays === null ? 9999 : b.stockDays;
+    }
+    if (typeof av === 'string') return tDir === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+    return tDir === 'asc' ? av - bv : bv - av;
+  });
+
+  document.getElementById('filterCount').textContent = data.length + ' ürün';
+
+  const cols = [
+    { key:'name',       label:'Ürün Adı'       },
+    { key:'code',       label:'Kod'             },
+    { key:'category',   label:'Kategori'        },
+    { key:'totalSales', label:'Top. Satış'      },
+    { key:'dailyAvg',   label:'Günlük Ort.'     },
+    { key:'currentStock', label:'Stok'          },
+    { key:'forecast15', label:'15G Tahmin'      },
+    { key:'orderQty',   label:'Sipariş'         },
+    { key:'stockDays',  label:'Stok Günü'       },
+    { key:'priority',   label:'Öncelik'         },
+  ];
+
+  const thHtml = cols.map(c => {
+    const cls = tSort === c.key ? (tDir === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+    return `<th class="${cls}" onclick="sortTable('${c.key}')">${c.label}</th>`;
+  }).join('');
+
+  const show = data.slice(0, 200);
+  const tbodyHtml = show.map(p => `<tr>
+    <td class="td-name" title="${esc(p.name)}">${esc(p.name)}</td>
+    <td class="td-code">${esc(p.code)}</td>
+    <td style="color:var(--mid)">${esc(p.category)}</td>
+    <td class="td-num" style="color:var(--green);font-weight:600">${p.totalSales.toLocaleString('tr')}</td>
+    <td class="td-num" style="color:var(--mid)">${p.dailyAvg}</td>
+    <td class="td-num">${p.currentStock.toLocaleString('tr')}</td>
+    <td class="td-num" style="color:var(--accent)">${p.forecast15.toLocaleString('tr')}</td>
+    <td class="${p.orderQty > 0 ? 'td-order' : 'td-zero'}">${p.orderQty > 0 ? p.orderQty.toLocaleString('tr') : '—'}</td>
+    <td class="td-num" style="color:${stockDayColor(p.stockDays)}">
+      ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
+      ${p.excessStock ? ' ⚠️' : ''}
+    </td>
+    <td><span class="risk risk-${p.riskClass}">${p.priority}</span></td>
+  </tr>`).join('');
+
+  const footer = data.length > 200
+    ? `<tr><td colspan="${cols.length}" style="text-align:center;padding:14px;color:var(--dim);font-size:12px;">
+        İlk 200 satır gösteriliyor (toplam ${data.length} ürün)
+      </td></tr>` : '';
+
+  document.getElementById('tableWrap').innerHTML = `
+    <div class="sec-card" style="padding:0;overflow:hidden;">
+      <div class="tbl-wrap">
+        <table class="data-tbl">
+          <thead><tr>${thHtml}</tr></thead>
+          <tbody>${tbodyHtml}${footer}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function sortTable(key) {
+  if (tSort === key) tDir = tDir === 'asc' ? 'desc' : 'asc';
+  else { tSort = key; tDir = key === 'priority' ? 'asc' : 'desc'; }
+  applyTableFilter();
+}
+
+function stockDayColor(d) {
+  if (d === null) return 'var(--green)';
+  if (d <= 5)  return 'var(--red)';
+  if (d <= 10) return '#fb923c';
+  if (d <= 15) return 'var(--yellow)';
+  return 'var(--green)';
 }
 
 /* ══════════════════════════════════════════
