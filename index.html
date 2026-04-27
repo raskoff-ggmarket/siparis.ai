@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sipariş Analiz Sistemi</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0e14;
+  --card: #151820;
+  --border: #262a36;
+  --accent: #e8723a;
+  --accent-glow: rgba(232,114,58,0.15);
+  --green: #34d399;
+  --green-bg: rgba(52,211,153,0.1);
+  --red: #f87171;
+  --red-bg: rgba(248,113,113,0.1);
+  --yellow: #fbbf24;
+  --yellow-bg: rgba(251,191,36,0.1);
+  --purple: #818cf8;
+  --purple-bg: rgba(129,140,248,0.1);
+  --text: #e4e0d8;
+  --dim: #6b7084;
+  --mid: #9ca0b0;
+  --font: 'Outfit', sans-serif;
+  --display: 'Fraunces', serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; display:flex; }
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-thumb { background:#2a2d3a; border-radius:3px; }
+
+/* ─── SIDEBAR ─── */
+.sidebar {
+  width:230px; background:var(--card); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:50;
+}
+.logo-area {
+  padding:22px 20px 18px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:12px;
+}
+.logo-icon { font-size:28px; }
+.logo-text .title { font-family:var(--display); font-weight:900; font-size:19px; color:var(--accent); line-height:1.1; }
+.logo-text .sub { font-size:12px; color:var(--mid); margin-top:2px; }
+.nav-list { flex:1; padding:14px 10px; display:flex; flex-direction:column; gap:3px; overflow-y:auto; }
+.nav-item {
+  display:flex; align-items:center; gap:12px; padding:11px 14px; border:none; border-radius:10px;
+  background:transparent; color:var(--dim); font-family:var(--font); font-weight:500; font-size:14px;
+  cursor:pointer; transition:all .15s; text-align:left; width:100%;
+}
+.nav-item:hover { background:rgba(255,255,255,0.03); color:var(--mid); }
+.nav-item.active { background:var(--accent-glow); color:var(--accent); font-weight:700; }
+.nav-item .n-ico { font-size:17px; min-width:20px; text-align:center; }
+.sidebar-foot {
+  padding:14px 20px; border-top:1px solid var(--border);
+  font-size:11px; color:var(--dim); line-height:1.7;
+}
+
+/* ─── BOTTOM NAV ─── */
+.bottom-nav {
+  display:none; position:fixed; bottom:0; left:0; right:0; z-index:50;
+  background:var(--card); border-top:1px solid var(--border);
+  padding:6px 0 env(safe-area-inset-bottom, 6px);
+}
+.bnav-inner { display:flex; justify-content:space-around; }
+.bnav-item {
+  display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 10px;
+  border:none; background:transparent; color:var(--dim); cursor:pointer; font-family:var(--font);
+  min-width:56px;
+}
+.bnav-item.active { color:var(--accent); }
+.bnav-item .b-ico { font-size:20px; }
+.bnav-item .b-lbl { font-size:10px; font-weight:600; }
+
+/* ─── MAIN ─── */
+.main { flex:1; margin-left:230px; min-height:100vh; display:flex; flex-direction:column; }
+.topbar {
+  padding:18px 32px; border-bottom:1px solid var(--border); background:var(--card);
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  position:sticky; top:0; z-index:40;
+}
+.topbar-left h1 { font-family:var(--display); font-weight:900; font-size:21px; }
+.topbar-left p { font-size:12px; color:var(--dim); margin-top:3px; }
+.topbar-pills { display:flex; gap:8px; flex-wrap:wrap; }
+.pill { padding:4px 12px; border-radius:8px; font-size:12px; font-weight:700; }
+.pill-red { background:var(--red-bg); color:var(--red); }
+.pill-yellow { background:var(--yellow-bg); color:var(--yellow); }
+.pill-green { background:var(--green-bg); color:var(--green); }
+.page-content { padding:28px 32px 100px; flex:1; }
+
+/* ─── SECTIONS ─── */
+.section { display:none; }
+.section.active { display:block; }
+
+/* ─── UPLOAD GRID ─── */
+.upload-grid {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;
+}
+.upload-card { display:flex; flex-direction:column; gap:0; }
+.upload-drop {
+  border:2px dashed var(--border); border-radius:16px; padding:32px 20px 24px; text-align:center;
+  cursor:pointer; transition:all .2s; background:var(--card); position:relative;
+}
+.upload-drop:hover { border-color:var(--accent); background:var(--accent-glow); }
+.upload-drop.dragover { border-color:var(--accent); background:var(--accent-glow); transform:scale(1.01); }
+.upload-drop.loaded { border-color:var(--green); background:var(--green-bg); }
+.upload-drop.error { border-color:var(--red); background:var(--red-bg); }
+.ud-icon { font-size:36px; margin-bottom:10px; }
+.ud-title { font-weight:700; font-size:15px; margin-bottom:4px; }
+.ud-desc { font-size:12px; color:var(--dim); margin-bottom:6px; line-height:1.5; }
+.ud-fname {
+  font-family:monospace; font-size:11px; color:var(--accent); background:var(--accent-glow);
+  display:inline-block; padding:3px 10px; border-radius:6px; word-break:break-all;
+}
+.ud-badge {
+  position:absolute; top:10px; right:10px; font-size:10px; font-weight:700;
+  padding:2px 7px; border-radius:5px;
+}
+.ud-req { background:var(--accent-glow); color:var(--accent); }
+.ud-opt { background:rgba(255,255,255,0.04); color:var(--dim); }
+
+/* ─── COLUMN MAPPING ─── */
+.col-map-card {
+  background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:22px; margin-bottom:16px;
+}
+.col-map-head {
+  display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;
+}
+.col-map-head h3 { font-family:var(--display); font-weight:700; font-size:16px; }
+.file-tag {
+  font-size:11px; font-weight:700; padding:3px 10px; border-radius:6px;
+  background:var(--purple-bg); color:var(--purple); max-width:220px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.map-status { margin-left:auto; font-size:12px; }
+.col-map-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; margin-bottom:16px;
+}
+.map-field label {
+  display:block; font-size:11px; font-weight:700; color:var(--dim);
+  text-transform:uppercase; letter-spacing:.7px; margin-bottom:5px;
+}
+.map-field select {
+  width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.03); color:var(--text); font-family:var(--font); font-size:13px;
+  outline:none; cursor:pointer; transition:border-color .15s; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7084' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 12px center; padding-right:32px;
+}
+.map-field select:focus { border-color:var(--accent); }
+.req-star { color:var(--red); }
+.opt-tag { color:var(--dim); font-weight:400; font-size:10px; }
+
+/* ─── PREVIEW TABLE ─── */
+.preview-wrap { overflow-x:auto; margin-top:10px; border-radius:8px; border:1px solid var(--border); }
+.preview-table { width:100%; border-collapse:collapse; font-size:12px; }
+.preview-table th {
+  padding:8px 12px; text-align:left; color:var(--dim); border-bottom:1px solid var(--border);
+  font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.6px; white-space:nowrap;
+  background:rgba(255,255,255,0.02);
+}
+.preview-table td {
+  padding:7px 12px; border-bottom:1px solid var(--border); color:var(--mid);
+  white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis;
+}
+.preview-table tr:last-child td { border-bottom:none; }
+
+/* ─── BUTTONS ─── */
+.btn {
+  display:inline-flex; align-items:center; gap:8px; border:none; border-radius:12px;
+  font-family:var(--font); font-weight:700; cursor:pointer; transition:all .2s;
+}
+.btn-lg { padding:14px 32px; font-size:15px; font-weight:800; }
+.btn-sm { padding:9px 18px; font-size:13px; }
+.btn-xs { padding:6px 14px; font-size:12px; }
+.btn-orange {
+  background:linear-gradient(135deg,var(--accent),#c85e28); color:#fff;
+  box-shadow:0 4px 20px var(--accent-glow);
+}
+.btn-orange:hover { transform:translateY(-1px); box-shadow:0 6px 28px rgba(232,114,58,0.3); }
+.btn-orange:disabled { background:#2a2d3a !important; color:#555 !important; cursor:not-allowed; box-shadow:none !important; transform:none !important; }
+.btn-ghost { background:rgba(255,255,255,0.04); color:var(--mid); border:1px solid var(--border); }
+.btn-ghost:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+.btn-confirmed { background:var(--green-bg) !important; color:var(--green) !important; border:1px solid rgba(52,211,153,0.3) !important; cursor:default !important; }
+
+/* ─── INFO / WARN BOX ─── */
+.info-box {
+  background:var(--purple-bg); border:1px solid rgba(129,140,248,0.12); border-radius:10px;
+  padding:12px 16px; font-size:12px; color:var(--mid); line-height:1.6;
+}
+.ready-box {
+  background:var(--green-bg); border:1px solid rgba(52,211,153,0.2); border-radius:10px;
+  padding:12px 16px; font-size:12px; color:var(--green); line-height:1.6;
+}
+
+/* ─── ACTION BAR ─── */
+.action-bar {
+  display:flex; gap:12px; flex-wrap:wrap; align-items:center;
+  padding:20px 0; border-top:1px solid var(--border); margin-top:8px;
+}
+.action-bar .hint-area { flex:1; min-width:200px; }
+
+/* ─── STEP CHIPS ─── */
+.step-row { display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap; }
+.step-chip {
+  display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px;
+  font-size:12px; font-weight:700; border:1px solid transparent; transition:all .2s;
+}
+.step-chip.done    { background:var(--green-bg); border-color:rgba(52,211,153,0.3); color:var(--green); }
+.step-chip.active  { background:var(--accent-glow); border-color:rgba(232,114,58,0.3); color:var(--accent); }
+.step-chip.pending { background:rgba(255,255,255,0.02); border-color:var(--border); color:var(--dim); }
+
+/* ─── DETAILS SUMMARY ─── */
+details summary {
+  font-size:12px; color:var(--dim); cursor:pointer; padding:6px 0;
+  list-style:none; display:flex; align-items:center; gap:6px;
+}
+details summary::-webkit-details-marker { display:none; }
+details[open] summary { color:var(--mid); }
+
+/* ─── EMPTY / PLACEHOLDER ─── */
+.placeholder {
+  text-align:center; padding:80px 20px; color:var(--dim);
+}
+.placeholder .p-ico { font-size:48px; margin-bottom:16px; }
+.placeholder .p-txt { font-size:14px; line-height:1.7; }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width:900px) {
+  .sidebar { display:none !important; }
+  .main { margin-left:0; }
+  .bottom-nav { display:block !important; }
+  .page-content { padding:16px 16px 90px; }
+  .topbar { padding:14px 16px; }
+  .topbar-left h1 { font-size:17px; }
+  .upload-grid { grid-template-columns:1fr; }
+  .col-map-grid { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:480px) {
+  .col-map-grid { grid-template-columns:1fr; }
+  .action-bar { flex-direction:column; align-items:stretch; }
+  .btn-lg { text-align:center; justify-content:center; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="logo-area">
+    <span class="logo-icon">🏪</span>
+    <div class="logo-text">
+      <div class="title">Sipariş AI</div>
+      <div class="sub">Analiz Sistemi</div>
+    </div>
+  </div>
+  <nav class="nav-list" id="navList"></nav>
+  <div class="sidebar-foot" id="sidebarFoot"></div>
+</aside>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav" id="bottomNav">
+  <div class="bnav-inner" id="bnavInner"></div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1 id="pageTitle">Dosya Yükleme</h1>
+      <p id="pageSubtitle">Excel dosyalarınızı yükleyin ve sütunları eşleştirin</p>
+    </div>
+    <div class="topbar-pills" id="topPills"></div>
+  </div>
+
+  <div class="page-content" id="pageContent">
+
+    <!-- ══ UPLOAD ══ -->
+    <div class="section active" id="sec-upload">
+
+      <div class="step-row">
+        <div class="step-chip active"  id="chip-1">📁 1. Dosyaları Yükle</div>
+        <div class="step-chip pending" id="chip-2">🔗 2. Sütunları Onayla</div>
+        <div class="step-chip pending" id="chip-3">🚀 3. Analizi Başlat</div>
+      </div>
+
+      <div class="upload-grid" id="uploadGrid"></div>
+
+      <div id="mapArea"></div>
+
+      <div class="action-bar">
+        <div class="hint-area" id="hintArea">
+          <div class="info-box">
+            💡 <strong>Ürün Listesi</strong> ve <strong>Satış Raporu</strong> zorunludur.
+            Stok listesi isteğe bağlıdır.
+          </div>
+        </div>
+        <button class="btn btn-lg btn-orange" id="btnAnalyze" disabled onclick="startAnalysis()">
+          🚀 Analizi Başlat
+        </button>
+      </div>
+    </div>
+
+    <!-- ══ DASHBOARD placeholder ══ -->
+    <div class="section" id="sec-dashboard">
+      <div class="placeholder">
+        <div class="p-ico">📊</div>
+        <div class="p-txt">Dashboard — Adım 2'de eklenecek</div>
+      </div>
+    </div>
+
+    <!-- ══ TABLE placeholder ══ -->
+    <div class="section" id="sec-table">
+      <div class="placeholder">
+        <div class="p-ico">📋</div>
+        <div class="p-txt">Ürün Detay Tablosu — Adım 2'de eklenecek</div>
+      </div>
+    </div>
+
+    <!-- ══ AI placeholder ══ -->
+    <div class="section" id="sec-ai">
+      <div class="placeholder">
+        <div class="p-ico">🤖</div>
+        <div class="p-txt">AI Danışman — Adım 4'te eklenecek</div>
+      </div>
+    </div>
+
+    <!-- ══ ORDER placeholder ══ -->
+    <div class="section" id="sec-order">
+      <div class="placeholder">
+        <div class="p-ico">🛒</div>
+        <div class="p-txt">Sipariş Listesi — Adım 5'te eklenecek</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ══════════════════════════════════════════
+   NAV CONFIG
+══════════════════════════════════════════ */
+const NAV = [
+  { id:'upload',    icon:'📁', label:'Yükle'     },
+  { id:'dashboard', icon:'📊', label:'Dashboard' },
+  { id:'table',     icon:'📋', label:'Detay'      },
+  { id:'ai',        icon:'🤖', label:'AI Agent'  },
+  { id:'order',     icon:'🛒', label:'Sipariş'   },
+];
+const TITLES = {
+  upload:    ['Dosya Yükleme',        'Excel dosyalarınızı yükleyin ve sütunları eşleştirin'],
+  dashboard: ['Dashboard',            'Analiz özeti ve grafikler'],
+  table:     ['Ürün Detay Tablosu',   'Tüm ürünler ve sipariş önerileri'],
+  ai:        ['AI Sipariş Danışmanı', 'Yapay zeka analizi ve öneriler'],
+  order:     ['Sipariş Listesi',      'Sipariş önerisi ve Excel export'],
+};
+
+/* ══════════════════════════════════════════
+   FILE CONFIG
+══════════════════════════════════════════ */
+const FILE_DEFS = [
+  {
+    key: 'products',
+    icon: '📦',
+    title: 'Ürün Kalem Listesi',
+    desc: 'Ürün kodu, adı ve kategori bilgileri',
+    required: true,
+    fields: [
+      { id:'code',     label:'Ürün Kodu / Barkod',  required:true,
+        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
+      { id:'name',     label:'Ürün Adı',             required:true,
+        cands:['ürün adı','ürün adi','ad','isim','name','açıklama','aciklama','ürün','urun'] },
+      { id:'category', label:'Kategori',             required:false,
+        cands:['kategori','grup','category','tür','tur','tip','grup adı','grup adi'] },
+      { id:'price',    label:'Birim Fiyat',          required:false,
+        cands:['fiyat','birim fiyat','price','tutar','satış fiyatı','satis fiyati','liste fiyatı'] },
+    ],
+  },
+  {
+    key: 'stock',
+    icon: '🗃️',
+    title: 'Stok Listesi',
+    desc: 'Ürün bazlı mevcut stok miktarları',
+    required: false,
+    fields: [
+      { id:'code', label:'Ürün Kodu / Barkod', required:true,
+        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
+      { id:'qty',  label:'Stok Adedi',          required:true,
+        cands:['stok','stok adedi','adet','miktar','quantity','stock','mevcut stok','mevcut','stok miktarı'] },
+    ],
+  },
+  {
+    key: 'sales',
+    icon: '📈',
+    title: 'Satış Raporu',
+    desc: "Ürün bazlı satış adetleri (Mart'tan itibaren)",
+    required: true,
+    fields: [
+      { id:'code', label:'Ürün Kodu / Barkod',  required:true,
+        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
+      { id:'qty',  label:'Satış Adedi',           required:true,
+        cands:['satış adedi','satis adedi','adet','miktar','toplam','satış','satis','quantity','satılan','satilan','satış miktarı'] },
+      { id:'date', label:'Tarih (isteğe bağlı)', required:false,
+        cands:['tarih','date','gün','gun','day','işlem tarihi','satış tarihi','satis tarihi'] },
+    ],
+  },
+];
+
+/* ══════════════════════════════════════════
+   STATE
+══════════════════════════════════════════ */
+const S = {
+  files:     { products:null, stock:null, sales:null },
+  names:     { products:null, stock:null, sales:null },
+  maps:      { products:{},   stock:{},   sales:{} },
+  confirmed: { products:false, stock:false, sales:false },
+  results:   [],
+  view:      'upload',
+};
+
+/* ══════════════════════════════════════════
+   INIT
+══════════════════════════════════════════ */
+function init() {
+  buildNav();
+  buildUploadGrid();
+  updateSidebarFoot();
+  switchView('upload');
+}
+
+function buildNav() {
+  const nl = document.getElementById('navList');
+  const bn = document.getElementById('bnavInner');
+  NAV.forEach(n => {
+    const sb = document.createElement('button');
+    sb.className = 'nav-item'; sb.dataset.view = n.id;
+    sb.innerHTML = `<span class="n-ico">${n.icon}</span>${n.label}`;
+    sb.onclick = () => switchView(n.id);
+    nl.appendChild(sb);
+
+    const bb = document.createElement('button');
+    bb.className = 'bnav-item'; bb.dataset.view = n.id;
+    bb.innerHTML = `<span class="b-ico">${n.icon}</span><span class="b-lbl">${n.label}</span>`;
+    bb.onclick = () => switchView(n.id);
+    bn.appendChild(bb);
+  });
+}
+
+function switchView(v) {
+  S.view = v;
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const sec = document.getElementById('sec-' + v);
+  if (sec) sec.classList.add('active');
+  document.querySelectorAll('.nav-item, .bnav-item').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === v)
+  );
+  const [title, sub] = TITLES[v] || [v, ''];
+  document.getElementById('pageTitle').textContent = title;
+  document.getElementById('pageSubtitle').textContent = sub;
+  updateTopPills();
+}
+
+function updateSidebarFoot() {
+  const today = new Date();
+  const m = today.getMonth() + 1;
+  const mNames = ['','Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const seasonEnd = new Date(today.getFullYear(), 10, 30);
+  const diff = Math.max(0, Math.round((seasonEnd - today) / 86400000));
+  const inSeason = m >= 3 && m <= 11;
+  document.getElementById('sidebarFoot').innerHTML =
+    `Sezon: Mar – Kas<br>` +
+    `Bugün: ${mNames[m]} ${today.getDate()}<br>` +
+    (inSeason
+      ? `<span style="color:var(--green)">✅ Sezon aktif — ${diff} gün kaldı</span>`
+      : `<span style="color:var(--dim)">❄️ Sezon dışı</span>`);
+}
+
+function updateTopPills() {
+  const hp = document.getElementById('topPills');
+  hp.innerHTML = '';
+  if (!S.results.length || S.view === 'upload') return;
+  const urgent = S.results.filter(r => r.priority === 'ACİL').length;
+  const high   = S.results.filter(r => r.priority === 'YÜKSEK').length;
+  if (urgent) hp.innerHTML += `<span class="pill pill-red">🚨 ${urgent} Acil</span>`;
+  if (high)   hp.innerHTML += `<span class="pill pill-yellow">⚡ ${high} Yüksek</span>`;
+}
+
+/* ══════════════════════════════════════════
+   UPLOAD GRID
+══════════════════════════════════════════ */
+function buildUploadGrid() {
+  const grid = document.getElementById('uploadGrid');
+  grid.innerHTML = '';
+  FILE_DEFS.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'upload-card';
+    card.innerHTML = `
+      <div class="upload-drop" id="drop-${f.key}"
+           onclick="pickFile('${f.key}')"
+           ondragover="onDragOver(event,'${f.key}')"
+           ondragleave="onDragLeave(event,'${f.key}')"
+           ondrop="onDrop(event,'${f.key}')">
+        <span class="ud-badge ${f.required ? 'ud-req' : 'ud-opt'}">${f.required ? 'Zorunlu' : 'İsteğe bağlı'}</span>
+        <div class="ud-icon" id="icon-${f.key}">${f.icon}</div>
+        <div class="ud-title">${f.title}</div>
+        <div class="ud-desc" id="desc-${f.key}">${f.desc}</div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function onDragOver(e, key) {
+  e.preventDefault();
+  document.getElementById('drop-' + key).classList.add('dragover');
+}
+function onDragLeave(e, key) {
+  document.getElementById('drop-' + key).classList.remove('dragover');
+}
+function onDrop(e, key) {
+  e.preventDefault();
+  document.getElementById('drop-' + key).classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(key, e.dataTransfer.files[0]);
+}
+function pickFile(key) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
+  inp.onchange = e => { if (e.target.files[0]) handleFile(key, e.target.files[0]); };
+  inp.click();
+}
+
+/* ══════════════════════════════════════════
+   FILE PARSING
+══════════════════════════════════════════ */
+async function handleFile(key, file) {
+  const dropEl = document.getElementById('drop-' + key);
+  dropEl.style.opacity = '0.6';
+  try {
+    const rows = await parseExcel(file);
+    if (!rows || rows.length === 0) throw new Error('Dosya boş veya okunamadı');
+
+    S.files[key] = rows;
+    S.names[key] = file.name;
+    S.confirmed[key] = false;
+
+    dropEl.classList.remove('error');
+    dropEl.classList.add('loaded');
+    document.getElementById('icon-' + key).textContent = '✅';
+    document.getElementById('desc-' + key).innerHTML =
+      `<span class="ud-fname">${esc(file.name)}</span>` +
+      `<br><span style="font-size:11px;color:var(--green);margin-top:4px;display:inline-block;">${rows.length} satır yüklendi</span>`;
+
+    const def = FILE_DEFS.find(f => f.key === key);
+    const detected = autoDetect(rows, def.fields);
+    S.maps[key] = detected;
+    renderMapping(key, rows, def, detected);
+    updateStepChips();
+    checkReady();
+  } catch (err) {
+    dropEl.classList.add('error');
+    document.getElementById('icon-' + key).textContent = '❌';
+    document.getElementById('desc-' + key).textContent = 'Hata: ' + err.message;
+  }
+  dropEl.style.opacity = '1';
+}
+
+function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, { defval:'' }));
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Dosya okunamadı'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/* ══════════════════════════════════════════
+   AUTO-DETECT COLUMNS
+══════════════════════════════════════════ */
+function autoDetect(rows, fields) {
+  const headers = Object.keys(rows[0] || {});
+  const map = {};
+  fields.forEach(f => {
+    const match = headers.find(h => {
+      const hl = normalize(h);
+      return f.cands.some(c => hl === c || hl.includes(c) || c.includes(hl));
+    });
+    map[f.id] = match || '__none__';
+  });
+  return map;
+}
+
+function normalize(s) {
+  return String(s).toLowerCase().trim()
+    .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s')
+    .replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c');
+}
+
+/* ══════════════════════════════════════════
+   COLUMN MAPPING UI
+══════════════════════════════════════════ */
+function renderMapping(key, rows, def, detected) {
+  const mapArea = document.getElementById('mapArea');
+  const existing = document.getElementById('map-' + key);
+  if (existing) existing.remove();
+
+  const headers = Object.keys(rows[0] || {});
+
+  const makeOptions = (selected) =>
+    `<option value="__none__"${selected === '__none__' ? ' selected' : ''}>— Yok / Seçin —</option>` +
+    headers.map(h =>
+      `<option value="${esc(h)}"${h === selected ? ' selected' : ''}>${esc(h)}</option>`
+    ).join('');
+
+  const fieldsHtml = def.fields.map(f => `
+    <div class="map-field">
+      <label>
+        ${f.label}
+        ${f.required ? '<span class="req-star"> *</span>' : '<span class="opt-tag"> (opsiyonel)</span>'}
+      </label>
+      <select id="sel-${key}-${f.id}" onchange="onMapChange('${key}')">
+        ${makeOptions(detected[f.id])}
+      </select>
+    </div>`).join('');
+
+  const previewCols = headers.slice(0, 7);
+  const previewHtml = `
+    <div class="preview-wrap">
+      <table class="preview-table">
+        <thead><tr>${previewCols.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.slice(0, 5).map(r =>
+          `<tr>${previewCols.map(c => `<td>${esc(String(r[c] ?? ''))}</td>`).join('')}</tr>`
+        ).join('')}</tbody>
+      </table>
+    </div>`;
+
+  const div = document.createElement('div');
+  div.className = 'col-map-card';
+  div.id = 'map-' + key;
+  div.innerHTML = `
+    <div class="col-map-head">
+      <h3>${def.icon} ${def.title}</h3>
+      <span class="file-tag">${esc(S.names[key])}</span>
+      <span class="map-status" id="mstatus-${key}" style="color:var(--yellow);">⚠️ Sütunları doğrulayın</span>
+    </div>
+    <div class="col-map-grid">${fieldsHtml}</div>
+    <details>
+      <summary>📄 Dosya önizlemesi (ilk ${Math.min(5, rows.length)} satır)</summary>
+      ${previewHtml}
+    </details>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <button class="btn btn-sm btn-orange" id="btnConfirm-${key}" onclick="confirmMap('${key}')">
+        ✅ Sütunları Onayla
+      </button>
+      <button class="btn btn-sm btn-ghost" onclick="reupload('${key}')">
+        🔄 Dosyayı Değiştir
+      </button>
+    </div>`;
+
+  mapArea.appendChild(div);
+
+  // Auto-confirm if all required fields are matched
+  const allOk = def.fields.filter(f => f.required).every(f => detected[f.id] !== '__none__');
+  if (allOk) setTimeout(() => confirmMap(key, true), 80);
+}
+
+function onMapChange(key) {
+  S.confirmed[key] = false;
+  const st = document.getElementById('mstatus-' + key);
+  if (st) { st.textContent = '⚠️ Sütunları doğrulayın'; st.style.color = 'var(--yellow)'; }
+  const btn = document.getElementById('btnConfirm-' + key);
+  if (btn) { btn.textContent = '✅ Sütunları Onayla'; btn.className = 'btn btn-sm btn-orange'; }
+  checkReady();
+  updateStepChips();
+}
+
+function confirmMap(key, silent = false) {
+  const def = FILE_DEFS.find(f => f.key === key);
+  const newMap = {};
+  def.fields.forEach(f => {
+    const sel = document.getElementById(`sel-${key}-${f.id}`);
+    newMap[f.id] = sel ? sel.value : '__none__';
+  });
+
+  const missing = def.fields.filter(f => f.required && newMap[f.id] === '__none__');
+  if (missing.length) {
+    alert('Zorunlu sütunlar seçilmedi:\n' + missing.map(f => '• ' + f.label).join('\n'));
+    return;
+  }
+
+  S.maps[key] = newMap;
+  S.confirmed[key] = true;
+
+  const st = document.getElementById('mstatus-' + key);
+  if (st) { st.textContent = '✅ Onaylandı'; st.style.color = 'var(--green)'; }
+
+  if (!silent) {
+    const btn = document.getElementById('btnConfirm-' + key);
+    if (btn) { btn.textContent = '✅ Onaylandı'; btn.className = 'btn btn-sm btn-confirmed'; }
+  }
+
+  updateStepChips();
+  checkReady();
+}
+
+function reupload(key) {
+  S.files[key] = null;
+  S.names[key] = null;
+  S.maps[key]  = {};
+  S.confirmed[key] = false;
+
+  const def = FILE_DEFS.find(f => f.key === key);
+  const drop = document.getElementById('drop-' + key);
+  drop.classList.remove('loaded', 'error');
+  document.getElementById('icon-' + key).textContent = def.icon;
+  document.getElementById('desc-' + key).textContent = def.desc;
+
+  const card = document.getElementById('map-' + key);
+  if (card) card.remove();
+
+  updateStepChips();
+  checkReady();
+}
+
+/* ══════════════════════════════════════════
+   STEP CHIPS + READY
+══════════════════════════════════════════ */
+function updateStepChips() {
+  const hasP = !!S.files.products;
+  const hasS = !!S.files.sales;
+  const both = hasP && hasS;
+  const okP  = both && S.confirmed.products;
+  const okS  = both && S.confirmed.sales;
+  const allOk = okP && okS;
+
+  setChip('chip-1', both ? 'done' : 'active');
+  setChip('chip-2', allOk ? 'done' : both ? 'active' : 'pending');
+  setChip('chip-3', allOk ? 'active' : 'pending');
+}
+
+function setChip(id, status) {
+  const el = document.getElementById(id);
+  if (el) el.className = 'step-chip ' + status;
+}
+
+function checkReady() {
+  const okP = !!S.files.products && S.confirmed.products;
+  const okS = !!S.files.sales    && S.confirmed.sales;
+  const ready = okP && okS;
+
+  document.getElementById('btnAnalyze').disabled = !ready;
+
+  const area = document.getElementById('hintArea');
+  if (ready) {
+    area.innerHTML = '<div class="ready-box">✅ <strong>Hazır!</strong> Analizi başlatabilirsiniz.</div>';
+  } else {
+    const missing = [];
+    if (!S.files.products)      missing.push('Ürün Listesi yüklenmedi');
+    else if (!S.confirmed.products) missing.push('Ürün Listesi sütunları onaylanmadı');
+    if (!S.files.sales)         missing.push('Satış Raporu yüklenmedi');
+    else if (!S.confirmed.sales)    missing.push('Satış Raporu sütunları onaylanmadı');
+    area.innerHTML = `<div class="info-box">💡 Eksik: <strong>${missing.join(' · ')}</strong></div>`;
+  }
+}
+
+/* ══════════════════════════════════════════
+   START ANALYSIS  →  Adım 2'de doldurulacak
+══════════════════════════════════════════ */
+function startAnalysis() {
+  switchView('dashboard');
+}
+
+/* ══════════════════════════════════════════
+   UTIL
+══════════════════════════════════════════ */
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+init();
+</script>
+</body>
+</html>
