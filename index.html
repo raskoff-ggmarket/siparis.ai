@@ -296,6 +296,21 @@ details[open] summary { color:var(--mid); }
 .filter-bar input { min-width:200px; }
 .filter-count { margin-left:auto; font-size:12px; color:var(--dim); white-space:nowrap; }
 
+/* ─── AI OUTPUT ─── */
+.ai-output {
+  white-space: pre-wrap; word-break: break-word;
+  font-size: 13px; line-height: 1.85; color: var(--mid);
+}
+.ai-output strong { color: var(--text); }
+.ai-spinner {
+  width: 28px; height: 28px; flex-shrink:0;
+  border: 3px solid rgba(99,102,241,0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ─── RESPONSIVE ─── */
 @media (max-width:900px) {
   .sidebar { display:none !important; }
@@ -409,12 +424,75 @@ details[open] summary { color:var(--mid); }
       </div>
     </div>
 
-    <!-- ══ AI placeholder ══ -->
+    <!-- ══ AI AGENT ══ -->
     <div class="section" id="sec-ai">
-      <div class="placeholder">
-        <div class="p-ico">🤖</div>
-        <div class="p-txt">AI Danışman — Adım 4'te eklenecek</div>
+
+      <!-- API Key Card -->
+      <div class="sec-card" id="aiKeyCard" style="max-width:680px;margin-bottom:16px;">
+        <div class="sec-card-title">🔑 Claude API Anahtarı</div>
+        <p style="font-size:13px;color:var(--mid);margin-bottom:14px;line-height:1.6;">
+          AI analizi için Anthropic API anahtarı gereklidir. Anahtar tarayıcınızda saklanır, sunucuya gönderilmez.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:1;min-width:240px;">
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">
+              API Anahtarı
+            </label>
+            <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..."
+              style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);
+                     background:rgba(255,255,255,0.03);color:var(--text);font-family:var(--font);
+                     font-size:13px;outline:none;transition:border-color .15s;"
+              onfocus="this.style.borderColor='var(--accent)'"
+              onblur="this.style.borderColor='var(--border)'"
+              onkeydown="if(event.key==='Enter')saveApiKey()">
+          </div>
+          <button class="btn btn-sm btn-orange" onclick="saveApiKey()">💾 Kaydet</button>
+          <span id="apiKeyStatus" style="font-size:12px;"></span>
+        </div>
+        <p style="font-size:11px;color:var(--dim);margin-top:10px;">
+          Anahtar almak için: <strong style="color:var(--mid);">console.anthropic.com → API Keys</strong>
+        </p>
       </div>
+
+      <!-- Run Button Card -->
+      <div class="sec-card" style="max-width:680px;margin-bottom:16px;">
+        <div class="sec-card-title">🤖 AI Sipariş Danışmanı</div>
+        <p style="font-size:13px;color:var(--mid);margin-bottom:16px;line-height:1.7;">
+          Analiz verileriniz Claude'a gönderilir. AI şunları değerlendirir:
+          sipariş stratejisi · kritik ürünler · ölü stok · kategori önerileri · sezon tavsiyesi
+        </p>
+        <div id="aiNoData" style="display:none;margin-bottom:12px;">
+          <div class="info-box">⚠️ Önce Dosya Yükleme ekranından analiz başlatın.</div>
+        </div>
+        <button class="btn btn-sm" id="btnRunAI"
+          style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 4px 20px rgba(99,102,241,0.25);padding:12px 24px;font-size:14px;"
+          onclick="runAI()">
+          🧠 AI Analizini Başlat
+        </button>
+      </div>
+
+      <!-- Loading -->
+      <div id="aiLoading" style="display:none;max-width:680px;">
+        <div class="sec-card" style="display:flex;align-items:center;gap:16px;">
+          <div class="ai-spinner"></div>
+          <div>
+            <div style="font-weight:700;font-size:14px;">Claude analiz ediyor…</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:3px;" id="aiLoadingMsg">Veriler hazırlanıyor</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="aiResult" style="display:none;max-width:680px;">
+        <div class="sec-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+            <div class="sec-card-title" style="margin-bottom:0;">📋 AI Analiz Raporu</div>
+            <button class="btn btn-xs btn-ghost" onclick="runAI()">🔄 Yeniden Çalıştır</button>
+          </div>
+          <div id="aiResultText" class="ai-output"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ══ ORDER placeholder ══ -->
@@ -1463,6 +1541,162 @@ function stockDayColor(d) {
 }
 
 /* ══════════════════════════════════════════
+   AI AGENT
+══════════════════════════════════════════ */
+function initAISection() {
+  const stored = localStorage.getItem('claude_api_key') || '';
+  const inp = document.getElementById('apiKeyInput');
+  if (inp && stored) {
+    inp.value = stored;
+    showApiKeyStatus(true);
+  }
+}
+
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput')?.value?.trim() || '';
+  if (!val) { showApiKeyStatus(false, 'Anahtar boş olamaz'); return; }
+  if (!val.startsWith('sk-ant')) { showApiKeyStatus(false, 'Geçersiz format (sk-ant... ile başlamalı)'); return; }
+  localStorage.setItem('claude_api_key', val);
+  showApiKeyStatus(true);
+}
+
+function showApiKeyStatus(ok, msg) {
+  const el = document.getElementById('apiKeyStatus');
+  if (!el) return;
+  if (ok) {
+    el.innerHTML = '<span style="color:var(--green)">✅ Kaydedildi</span>';
+  } else {
+    el.innerHTML = `<span style="color:var(--red)">❌ ${esc(msg || 'Hata')}</span>`;
+  }
+  setTimeout(() => { if (el) el.innerHTML = ''; }, 3000);
+}
+
+async function runAI() {
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  if (!apiKey) {
+    alert('Önce Claude API anahtarınızı girin.');
+    document.getElementById('apiKeyInput')?.focus();
+    return;
+  }
+  if (!S.results.length) {
+    document.getElementById('aiNoData').style.display = 'block';
+    return;
+  }
+  document.getElementById('aiNoData').style.display = 'none';
+
+  const loading  = document.getElementById('aiLoading');
+  const resultEl = document.getElementById('aiResult');
+  const btn      = document.getElementById('btnRunAI');
+
+  loading.style.display  = 'block';
+  resultEl.style.display = 'none';
+  btn.disabled = true;
+
+  const setMsg = (t) => {
+    const m = document.getElementById('aiLoadingMsg');
+    if (m) m.textContent = t;
+  };
+
+  try {
+    setMsg('Veriler derleniyor…');
+    const prompt = buildAIPrompt();
+    setMsg('Claude\'a gönderiliyor…');
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.map(c => c.text || '').join('') || 'Yanıt alınamadı.';
+
+    document.getElementById('aiResultText').textContent = text;
+    resultEl.style.display = 'block';
+    setMsg('Tamamlandı');
+  } catch (err) {
+    document.getElementById('aiResultText').textContent =
+      '⚠️ Hata: ' + err.message +
+      (err.message.includes('401') ? '\n\nAPI anahtarını kontrol edin.' : '');
+    resultEl.style.display = 'block';
+  }
+
+  loading.style.display = 'none';
+  btn.disabled = false;
+}
+
+function buildAIPrompt() {
+  const r = S.results;
+  const today = new Date();
+  const mNames = ['','Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const m = today.getMonth() + 1;
+
+  const cnt    = (p) => r.filter(x => x.priority === p).length;
+  const top5   = r.filter(x => x.totalSales > 0).slice(0, 5);
+  const urgent = r.filter(x => x.priority === 'ACİL').slice(0, 8);
+  const dead   = r.filter(x => x.totalSales === 0).slice(0, 10);
+
+  const catMap = {};
+  r.forEach(p => {
+    const c = p.category === '-' ? 'Diğer' : p.category;
+    if (!catMap[c]) catMap[c] = { sales: 0, order: 0, count: 0 };
+    catMap[c].sales += p.totalSales;
+    catMap[c].order += p.orderQty;
+    catMap[c].count++;
+  });
+  const topCats = Object.entries(catMap).sort((a, b) => b[1].sales - a[1].sales).slice(0, 6);
+
+  return `Sen bir perakende market sipariş danışmanısın. Aşağıdaki satış ve stok verilerini analiz et.
+
+GENEL DURUM
+- Tarih: ${mNames[m]} ${today.getDate()}, ${today.getFullYear()}
+- Sezon: Mart – Kasım (turizm bölgesi, yaz ayları yoğun)
+- Analiz dönemi: Mart 1'den bu yana ${S.elapsedDays} gün
+- Toplam ürün: ${r.length}
+- Acil sipariş: ${cnt('ACİL')} ürün (stok < 5 gün)
+- Yüksek öncelik: ${cnt('YÜKSEK')} ürün (stok 5-10 gün)
+- Orta öncelik: ${cnt('ORTA')} ürün (stok 10-15 gün)
+- Ölü stok: ${r.filter(x => x.totalSales === 0).length} ürün (hiç satış yok)
+- Toplam sipariş önerisi: ${r.reduce((s, x) => s + x.orderQty, 0)} adet
+
+EN ÇOK SATAN 5 ÜRÜN
+${top5.map(p => `- ${p.name} (${p.code}): ${p.totalSales} satış, günlük ort. ${p.dailyAvg}, stok ${p.currentStock} gün dayanır, sipariş önerisi ${p.orderQty}`).join('\n')}
+
+ACİL SİPARİŞ GEREKEN ÜRÜNLER
+${urgent.length ? urgent.map(p => `- ${p.name}: stok ${p.currentStock} adet, ${p.stockDays ?? 0} gün dayanır, ${p.orderQty} adet sipariş önerisi`).join('\n') : '- Yok'}
+
+ÖLÜK STOK ÖRNEKLERİ (${dead.length} ürün)
+${dead.slice(0, 6).map(p => `- ${p.name} (stok: ${p.currentStock})`).join('\n')}
+
+KATEGORİ BAZLI ÖZET
+${topCats.map(([c, d]) => `- ${c}: ${d.count} ürün, ${d.sales} satış, ${d.order} sipariş önerisi`).join('\n')}
+
+Lütfen şunları içeren kısa ve pratik bir analiz yaz (Türkçe):
+1. 🎯 Genel Sipariş Stratejisi (2-3 cümle)
+2. 🚨 Kritik Ürünler & Acil Aksiyonlar
+3. 📦 Odaklanılacak Kategoriler
+4. 💀 Ölü Stok Önerileri
+5. 🌊 Turizm Sezonu Tavsiyesi
+6. ⚠️ Dikkat Edilmesi Gereken Riskler
+
+Her maddeyi kısa tut, uygulanabilir öneriler ver.`;
+}
+
+/* ══════════════════════════════════════════
    UTIL
 ══════════════════════════════════════════ */
 function esc(s) {
@@ -1472,6 +1706,7 @@ function esc(s) {
 }
 
 init();
+initAISection();
 </script>
 </body>
 </html>
