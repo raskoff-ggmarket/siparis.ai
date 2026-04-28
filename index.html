@@ -296,6 +296,27 @@ details[open] summary { color:var(--mid); }
 .filter-bar input { min-width:200px; }
 .filter-count { margin-left:auto; font-size:12px; color:var(--dim); white-space:nowrap; }
 
+/* ─── ORDER TABLE ─── */
+.order-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.order-tbl th {
+  padding:10px 10px; text-align:left; color:var(--dim); border-bottom:2px solid var(--border);
+  font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.6px; white-space:nowrap;
+}
+.order-tbl td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.order-tbl tr.row-checked td { background:rgba(52,211,153,0.04); }
+.order-tbl tr:hover td { background:rgba(255,255,255,0.015); }
+.order-tbl tr.row-checked:hover td { background:rgba(52,211,153,0.07); }
+.order-tbl tr.row-unchecked td { opacity:.55; }
+.qty-input {
+  width:70px; padding:5px 8px; border-radius:7px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.04); color:var(--text); font-family:var(--font);
+  font-size:13px; font-weight:700; text-align:center; outline:none;
+  transition:border-color .15s;
+}
+.qty-input:focus { border-color:var(--accent); background:var(--accent-glow); }
+.qty-input:disabled { opacity:.3; cursor:not-allowed; }
+.order-cb { width:16px; height:16px; accent-color:var(--green); cursor:pointer; }
+
 /* ─── AI OUTPUT ─── */
 .ai-output {
   white-space: pre-wrap; word-break: break-word;
@@ -495,12 +516,44 @@ details[open] summary { color:var(--mid); }
 
     </div>
 
-    <!-- ══ ORDER placeholder ══ -->
+    <!-- ══ ORDER LIST ══ -->
     <div class="section" id="sec-order">
-      <div class="placeholder">
-        <div class="p-ico">🛒</div>
-        <div class="p-txt">Sipariş Listesi — Adım 5'te eklenecek</div>
+
+      <!-- KPI strip -->
+      <div class="stat-grid" id="orderKpi" style="margin-bottom:16px;"></div>
+
+      <!-- Toolbar -->
+      <div id="orderToolbar" style="display:none;margin-bottom:14px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-xs btn-ghost" onclick="orderSelectAll(true)">☑️ Tümünü Seç</button>
+          <button class="btn btn-xs btn-ghost" onclick="orderSelectAll(false)">⬜ Tümünü Kaldır</button>
+          <button class="btn btn-xs btn-ghost" onclick="orderSelectByPriority('ACİL')">🔴 Acilleri Seç</button>
+          <button class="btn btn-xs btn-ghost" onclick="orderSelectByPriority('YÜKSEK')">🟠 Yükseği Seç</button>
+          <button class="btn btn-xs btn-ghost" onclick="orderResetQty()">↩️ Miktarları Sıfırla</button>
+          <span style="margin-left:auto;font-size:12px;color:var(--dim);" id="orderSelCount"></span>
+        </div>
       </div>
+
+      <!-- Table -->
+      <div id="orderTableWrap">
+        <div class="placeholder">
+          <div class="p-ico">🛒</div>
+          <div class="p-txt">Analiz başlatılmadı.<br>Dosya yükleyip analizi çalıştırın.</div>
+        </div>
+      </div>
+
+      <!-- Export bar -->
+      <div id="orderExportBar" style="display:none;padding:20px 0;border-top:1px solid var(--border);margin-top:8px;display:none;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:160px;">
+          <div class="info-box" id="orderExportHint"></div>
+        </div>
+        <button class="btn btn-lg" id="btnExport"
+          style="background:linear-gradient(135deg,var(--green),#059669);color:#fff;box-shadow:0 4px 20px var(--green-bg);"
+          onclick="exportOrder()">
+          📥 Sipariş Listesini Excel'e İndir
+        </button>
+      </div>
+
     </div>
 
   </div>
@@ -1068,8 +1121,10 @@ function startAnalysis() {
   setTimeout(() => {
     try {
       runAnalysis();
+      orderState = {};
       renderDashboard();
       renderTable();
+      renderOrderSection();
       switchView('dashboard');
     } catch (err) {
       alert('Analiz hatası: ' + err.message);
@@ -1414,6 +1469,243 @@ function buildTop10Chart() {
       },
     },
   });
+}
+
+/* ══════════════════════════════════════════
+   TABLE RENDER  (full detail view)
+══════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   ORDER LIST  (user-controlled)
+══════════════════════════════════════════ */
+
+// Per-product order state: { code → { checked, qty } }
+let orderState = {};
+
+function renderOrderSection() {
+  const candidates = S.results.filter(r => r.orderQty > 0);
+
+  // Init order state (preserve if already set)
+  candidates.forEach(p => {
+    if (!orderState[p.code]) {
+      orderState[p.code] = { checked: true, qty: p.orderQty };
+    }
+  });
+
+  updateOrderKpi();
+
+  if (!candidates.length) {
+    document.getElementById('orderTableWrap').innerHTML = `
+      <div class="placeholder">
+        <div class="p-ico">✅</div>
+        <div class="p-txt">Sipariş önerisi olan ürün bulunamadı.<br>Tüm ürünler yeterli stoka sahip.</div>
+      </div>`;
+    document.getElementById('orderToolbar').style.display = 'none';
+    document.getElementById('orderExportBar').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('orderToolbar').style.display = 'block';
+  document.getElementById('orderExportBar').style.display = 'flex';
+
+  renderOrderTable(candidates);
+  updateOrderSelCount();
+  updateExportHint();
+}
+
+function renderOrderTable(candidates) {
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3 };
+  const sorted = candidates.slice().sort((a, b) =>
+    (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9) || b.orderQty - a.orderQty
+  );
+
+  const rows = sorted.map(p => {
+    const st  = orderState[p.code] || { checked: true, qty: p.orderQty };
+    const cls = st.checked ? 'row-checked' : 'row-unchecked';
+    return `<tr id="orow-${esc(p.code)}" class="${cls}">
+      <td style="text-align:center;">
+        <input type="checkbox" class="order-cb"
+          ${st.checked ? 'checked' : ''}
+          onchange="orderToggle('${esc(p.code)}',this.checked)">
+      </td>
+      <td class="td-name" title="${esc(p.name)}">${esc(p.name)}</td>
+      <td class="td-code">${esc(p.code)}</td>
+      <td style="color:var(--mid);font-size:12px;">${esc(p.category)}</td>
+      <td class="td-num" style="color:var(--green);">${p.totalSales}</td>
+      <td class="td-num" style="color:var(--mid);">${p.dailyAvg}</td>
+      <td class="td-num">${p.currentStock}</td>
+      <td class="td-num" style="color:var(--accent);">${p.forecast15}</td>
+      <td style="color:var(--dim);font-size:11px;">
+        ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
+      </td>
+      <td>
+        <input type="number" class="qty-input" min="0" step="1"
+          value="${st.qty}"
+          ${!st.checked ? 'disabled' : ''}
+          id="qty-${esc(p.code)}"
+          onchange="orderQtyChange('${esc(p.code)}',this.value)"
+          oninput="orderQtyChange('${esc(p.code)}',this.value)">
+      </td>
+      <td><span class="risk risk-${p.riskClass}">${p.priority}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('orderTableWrap').innerHTML = `
+    <div class="sec-card" style="padding:0;overflow:hidden;">
+      <div class="tbl-wrap">
+        <table class="order-tbl">
+          <thead><tr>
+            <th style="width:36px;">✓</th>
+            <th>Ürün Adı</th><th>Kod</th><th>Kategori</th>
+            <th>Top. Satış</th><th>Günlük Ort.</th><th>Stok</th><th>15G Tahmin</th>
+            <th>Stok Günü</th>
+            <th>Sipariş Miktarı<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--dim);">Düzenleyebilirsiniz</span></th>
+            <th>Öncelik</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function orderToggle(code, checked) {
+  if (!orderState[code]) return;
+  orderState[code].checked = checked;
+  const row = document.getElementById('orow-' + code);
+  if (row) row.className = checked ? 'row-checked' : 'row-unchecked';
+  const inp = document.getElementById('qty-' + code);
+  if (inp) inp.disabled = !checked;
+  updateOrderKpi();
+  updateOrderSelCount();
+  updateExportHint();
+}
+
+function orderQtyChange(code, val) {
+  if (!orderState[code]) return;
+  orderState[code].qty = Math.max(0, parseInt(val) || 0);
+  updateOrderKpi();
+  updateExportHint();
+}
+
+function orderSelectAll(checked) {
+  Object.keys(orderState).forEach(code => {
+    orderState[code].checked = checked;
+    const row = document.getElementById('orow-' + code);
+    if (row) row.className = checked ? 'row-checked' : 'row-unchecked';
+    const cb = document.querySelector(`#orow-${code} .order-cb`);
+    if (cb) cb.checked = checked;
+    const inp = document.getElementById('qty-' + code);
+    if (inp) inp.disabled = !checked;
+  });
+  updateOrderKpi();
+  updateOrderSelCount();
+  updateExportHint();
+}
+
+function orderSelectByPriority(priority) {
+  S.results.forEach(p => {
+    if (!orderState[p.code]) return;
+    const checked = p.priority === priority;
+    orderState[p.code].checked = checked;
+    const row = document.getElementById('orow-' + p.code);
+    if (row) row.className = checked ? 'row-checked' : 'row-unchecked';
+    const cb = document.querySelector(`#orow-${p.code} .order-cb`);
+    if (cb) cb.checked = checked;
+    const inp = document.getElementById('qty-' + p.code);
+    if (inp) inp.disabled = !checked;
+  });
+  updateOrderKpi();
+  updateOrderSelCount();
+  updateExportHint();
+}
+
+function orderResetQty() {
+  S.results.forEach(p => {
+    if (!orderState[p.code]) return;
+    orderState[p.code].qty = p.orderQty;
+    const inp = document.getElementById('qty-' + p.code);
+    if (inp) inp.value = p.orderQty;
+  });
+  updateOrderKpi();
+  updateExportHint();
+}
+
+function updateOrderKpi() {
+  const selected  = Object.values(orderState).filter(s => s.checked);
+  const totalQty  = selected.reduce((sum, s) => sum + s.qty, 0);
+  const urgentCnt = S.results.filter(p =>
+    orderState[p.code]?.checked && p.priority === 'ACİL'
+  ).length;
+  const allCnt = Object.keys(orderState).length;
+
+  document.getElementById('orderKpi').innerHTML = [
+    kpiCard('Toplam Kalem',    allCnt,    '📦', ''),
+    kpiCard('Seçili Kalem',   selected.length, '☑️', 'var(--green)'),
+    kpiCard('Toplam Adet',    totalQty.toLocaleString('tr'), '🛒', 'var(--accent)'),
+    kpiCard('Acil Kalem',     urgentCnt, '🚨', 'var(--red)'),
+  ].join('');
+}
+
+function kpiCard(label, value, icon, color) {
+  return `<div class="stat-card">
+    <div class="s-label">${label}</div>
+    <div class="s-value" style="color:${color || 'var(--text)'}">${icon} ${value}</div>
+  </div>`;
+}
+
+function updateOrderSelCount() {
+  const sel = Object.values(orderState).filter(s => s.checked).length;
+  const tot = Object.keys(orderState).length;
+  const el = document.getElementById('orderSelCount');
+  if (el) el.textContent = `${sel} / ${tot} ürün seçili`;
+}
+
+function updateExportHint() {
+  const sel = Object.values(orderState).filter(s => s.checked);
+  const qty = sel.reduce((s, x) => s + x.qty, 0);
+  const el  = document.getElementById('orderExportHint');
+  if (!el) return;
+  if (!sel.length) {
+    el.textContent = '⚠️ Hiç ürün seçilmedi. En az bir ürün seçin.';
+    document.getElementById('btnExport').disabled = true;
+  } else {
+    el.innerHTML = `✅ <strong>${sel.length} ürün</strong>, toplam <strong>${qty.toLocaleString('tr')} adet</strong> Excel'e aktarılacak.`;
+    document.getElementById('btnExport').disabled = false;
+  }
+}
+
+function exportOrder() {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows  = [];
+
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
+  const selected = S.results
+    .filter(p => orderState[p.code]?.checked && orderState[p.code].qty > 0)
+    .sort((a, b) => (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9));
+
+  if (!selected.length) { alert('Seçili ve miktarı > 0 olan ürün yok.'); return; }
+
+  selected.forEach(p => {
+    rows.push({
+      'Ürün Kodu':        p.code,
+      'Ürün Adı':         p.name,
+      'Kategori':         p.category,
+      'Toplam Satış':     p.totalSales,
+      'Günlük Ortalama':  p.dailyAvg,
+      'Mevcut Stok':      p.currentStock,
+      'Stok Günü':        p.stockDays ?? '∞',
+      '15G Tahmin':       p.forecast15,
+      'Sistem Önerisi':   p.orderQty,
+      'Sipariş Miktarı':  orderState[p.code].qty,
+      'Öncelik':          p.priority,
+    });
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Column widths
+  ws['!cols'] = [10,30,16,12,14,12,10,12,14,14,10].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sipariş');
+  XLSX.writeFile(wb, `siparis_${today}.xlsx`);
 }
 
 /* ══════════════════════════════════════════
