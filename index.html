@@ -1192,9 +1192,11 @@ function runAnalysis() {
     const totalSales   = lookupCode(salesMap, code);
     const currentStock = lookupCode(stockMap, code);
 
-    const dailyAvg   = totalSales / elapsedDays;
-    const forecast15 = Math.ceil(dailyAvg * 15);
-    const orderQty   = Math.max(0, forecast15 - currentStock);
+    const dailyAvg      = totalSales / elapsedDays;
+    const seasonEnd     = new Date(today.getFullYear(), 10, 30);
+    const daysLeft      = Math.max(1, Math.round((seasonEnd - today) / 86400000));
+    const forecastSeason = Math.ceil(dailyAvg * daysLeft);
+    const orderQty      = Math.max(0, forecastSeason - currentStock);
 
     // Days of stock remaining (null = infinite, no sales)
     const stockDays = dailyAvg > 0 ? Math.round(currentStock / dailyAvg) : null;
@@ -1220,7 +1222,7 @@ function runAnalysis() {
       code, barcode, name, category, price,
       totalSales, currentStock,
       dailyAvg: Math.round(dailyAvg * 100) / 100,
-      forecast15, orderQty,
+      forecastSeason, daysLeft, orderQty,
       stockDays, excessStock,
       priority, riskClass,
     };
@@ -1289,7 +1291,7 @@ function renderDashboard(diag = null) {
     { label:'Acil Sipariş',        value:cnt('ACİL'),             color:'var(--red)',        sub:'stok < 5 gün' },
     { label:'Yüksek Öncelik',      value:cnt('YÜKSEK'),           color:'#fb923c',           sub:'stok 5–10 gün' },
     { label:'Sipariş Kalemi',      value:r.filter(x=>x.orderQty>0).length, color:'var(--accent)', sub:'sipariş önerisi > 0' },
-    { label:'Toplam Sipariş Adedi',value:totalOrder.toLocaleString('tr'), color:'var(--accent)', sub:'15 günlük tahmin' },
+    { label:'Toplam Sipariş Adedi',value:totalOrder.toLocaleString('tr'), color:'var(--accent)', sub:'sezon sonu tahmini' },
     { label:'Ölü Stok',            value:deadStock,               color:'var(--dim)',        sub:'hiç satış yok' },
     { label:'Ort. Stok Günü',      value:avgDays,                 color:'var(--green)',      sub:'mevcut stok dayanma' },
     { label:'Sezonda Kalan',       value:daysLeft + ' gün',       color:'var(--purple)',     sub:'Kasım sonuna kadar' },
@@ -1614,7 +1616,7 @@ function renderOrderTable() {
       <td class="td-num" style="color:${p.totalSales>0?'var(--green)':'var(--dim)'};">${p.totalSales || '—'}</td>
       <td class="td-num" style="color:var(--mid);">${p.dailyAvg}</td>
       <td class="td-num">${p.currentStock}</td>
-      <td class="td-num" style="color:var(--accent);">${p.forecast15 || '—'}</td>
+      <td class="td-num" style="color:var(--accent);">${p.forecastSeason || '—'}</td>
       <td style="color:var(--dim);font-size:11px;">
         ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
       </td>
@@ -1759,10 +1761,11 @@ function updateExportHint() {
 }
 
 function buildExportNote(p) {
-  if (p.priority === 'ACİL')   return `KRİTİK: ${p.stockDays ?? 0} günde tükenir, acil sipariş`;
-  if (p.priority === 'YÜKSEK') return `${p.stockDays} günde tükenir, yüksek öncelik`;
-  if (p.priority === 'ORTA')   return `${p.stockDays} günde tükenir, orta öncelik`;
-  if (p.priority === 'DÜŞÜK')  return `Stok ${p.stockDays} gün yeterli`;
+  const dl = p.daysLeft ?? 0;
+  if (p.priority === 'ACİL')   return `KRİTİK: ${p.stockDays ?? 0} günde tükenir, acil sipariş — sezon sonuna ${dl} gün kaldı`;
+  if (p.priority === 'YÜKSEK') return `${p.stockDays} günde tükenir, yüksek öncelik — sezon sonu tahmini: ${p.forecastSeason} adet`;
+  if (p.priority === 'ORTA')   return `${p.stockDays} günde tükenir, orta öncelik — sezon sonu tahmini: ${p.forecastSeason} adet`;
+  if (p.priority === 'DÜŞÜK')  return `Stok sezon sonuna yeterli (${p.stockDays} gün dayanır, ${dl} gün kaldı)`;
   if (p.totalSales === 0)      return `Satış yok — ölü stok, incelenebilir`;
   return '';
 }
@@ -1866,7 +1869,7 @@ function applyTableFilter() {
     { key:'totalSales', label:'Top. Satış'      },
     { key:'dailyAvg',   label:'Günlük Ort.'     },
     { key:'currentStock', label:'Stok'          },
-    { key:'forecast15', label:'15G Tahmin'      },
+    { key:'forecastSeason', label:'Sezon Tahmini' },
     { key:'orderQty',   label:'Sipariş'         },
     { key:'stockDays',  label:'Stok Günü'       },
     { key:'priority',   label:'Öncelik'         },
@@ -1885,7 +1888,7 @@ function applyTableFilter() {
     <td class="td-num" style="color:var(--green);font-weight:600">${p.totalSales.toLocaleString('tr')}</td>
     <td class="td-num" style="color:var(--mid)">${p.dailyAvg}</td>
     <td class="td-num">${p.currentStock.toLocaleString('tr')}</td>
-    <td class="td-num" style="color:var(--accent)">${p.forecast15.toLocaleString('tr')}</td>
+    <td class="td-num" style="color:var(--accent)">${p.forecastSeason.toLocaleString('tr')}</td>
     <td class="${p.orderQty > 0 ? 'td-order' : 'td-zero'}">${p.orderQty > 0 ? p.orderQty.toLocaleString('tr') : '—'}</td>
     <td class="td-num" style="color:${stockDayColor(p.stockDays)}">
       ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
