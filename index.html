@@ -93,32 +93,28 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); min-hei
 .section { display:none; }
 .section.active { display:block; }
 
-/* ─── UPLOAD GRID ─── */
-.upload-grid {
-  display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;
+/* ─── SINGLE UPLOAD ─── */
+.upload-single {
+  border:2px dashed var(--border); border-radius:20px; padding:52px 32px; text-align:center;
+  cursor:pointer; transition:all .2s; background:var(--card); margin-bottom:16px;
 }
-.upload-card { display:flex; flex-direction:column; gap:0; }
-.upload-drop {
-  border:2px dashed var(--border); border-radius:16px; padding:32px 20px 24px; text-align:center;
-  cursor:pointer; transition:all .2s; background:var(--card); position:relative;
-}
-.upload-drop:hover { border-color:var(--accent); background:var(--accent-glow); }
-.upload-drop.dragover { border-color:var(--accent); background:var(--accent-glow); transform:scale(1.01); }
-.upload-drop.loaded { border-color:var(--green); background:var(--green-bg); }
-.upload-drop.error { border-color:var(--red); background:var(--red-bg); }
-.ud-icon { font-size:36px; margin-bottom:10px; }
-.ud-title { font-weight:700; font-size:15px; margin-bottom:4px; }
-.ud-desc { font-size:12px; color:var(--dim); margin-bottom:6px; line-height:1.5; }
+.upload-single:hover  { border-color:var(--accent); background:var(--accent-glow); }
+.upload-single.dragover { border-color:var(--accent); background:var(--accent-glow); transform:scale(1.005); }
+.upload-single.loaded { border-color:var(--green); background:var(--green-bg); }
+.upload-single.error  { border-color:var(--red);   background:var(--red-bg); }
+.ud-icon  { font-size:44px; margin-bottom:12px; }
+.ud-title { font-weight:800; font-size:17px; margin-bottom:6px; }
+.ud-desc  { font-size:13px; color:var(--dim); line-height:1.6; }
 .ud-fname {
-  font-family:monospace; font-size:11px; color:var(--accent); background:var(--accent-glow);
-  display:inline-block; padding:3px 10px; border-radius:6px; word-break:break-all;
+  font-family:monospace; font-size:12px; color:var(--accent); background:var(--accent-glow);
+  display:inline-block; padding:4px 12px; border-radius:7px; margin-top:6px; word-break:break-all;
 }
-.ud-badge {
-  position:absolute; top:10px; right:10px; font-size:10px; font-weight:700;
-  padding:2px 7px; border-radius:5px;
+
+/* ─── SHEET CHIP ─── */
+.sheet-chip {
+  display:inline-block; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:600;
+  border:1px solid transparent; cursor:default;
 }
-.ud-req { background:var(--accent-glow); color:var(--accent); }
-.ud-opt { background:rgba(255,255,255,0.04); color:var(--dim); }
 
 /* ─── COLUMN MAPPING ─── */
 .col-map-card {
@@ -354,20 +350,37 @@ details[open] summary { color:var(--mid); }
     <div class="section active" id="sec-upload">
 
       <div class="step-row">
-        <div class="step-chip active"  id="chip-1">📁 1. Dosyaları Yükle</div>
-        <div class="step-chip pending" id="chip-2">🔗 2. Sütunları Onayla</div>
-        <div class="step-chip pending" id="chip-3">🚀 3. Analizi Başlat</div>
+        <div class="step-chip active"  id="chip-1">📁 1. Dosyayı Yükle</div>
+        <div class="step-chip pending" id="chip-2">📋 2. Sekmeleri Ata</div>
+        <div class="step-chip pending" id="chip-3">🔗 3. Sütunları Onayla</div>
+        <div class="step-chip pending" id="chip-4">🚀 4. Analizi Başlat</div>
       </div>
 
-      <div class="upload-grid" id="uploadGrid"></div>
+      <!-- Tek dosya drop zone -->
+      <div class="upload-single" id="dropSingle"
+           onclick="pickSingleFile()"
+           ondragover="onSingleDragOver(event)"
+           ondragleave="onSingleDragLeave(event)"
+           ondrop="onSingleDrop(event)">
+        <div class="ud-icon">📊</div>
+        <div class="ud-title">Excel Dosyanızı Yükleyin</div>
+        <div class="ud-desc">
+          Tek bir <strong>.xlsx</strong> dosyası içinde 3 sekme:<br>
+          <strong>Sipariş / Ürün Listesi · Satış Raporu · Stok</strong><br>
+          <span style="font-size:11px;margin-top:6px;display:inline-block;">Sürükle-bırak veya tıklayarak seçin</span>
+        </div>
+      </div>
 
+      <!-- Sekme atama (dosya yüklendikten sonra görünür) -->
+      <div id="sheetAssignArea"></div>
+
+      <!-- Sütun eşleştirme (sekmeler atandıktan sonra görünür) -->
       <div id="mapArea"></div>
 
       <div class="action-bar">
         <div class="hint-area" id="hintArea">
           <div class="info-box">
-            💡 <strong>Ürün Listesi</strong> ve <strong>Satış Raporu</strong> zorunludur.
-            Stok listesi isteğe bağlıdır.
+            💡 <strong>Ürün/Sipariş</strong> ve <strong>Satış</strong> sekmeleri zorunludur. Stok isteğe bağlıdır.
           </div>
         </div>
         <button class="btn btn-lg btn-orange" id="btnAnalyze" disabled onclick="startAnalysis()">
@@ -491,11 +504,16 @@ const FILE_DEFS = [
    STATE
 ══════════════════════════════════════════ */
 const S = {
+  workbook:       null,          // XLSX workbook object
+  fileName:       null,
+  sheetNames:     [],
+  sheetAssign:    { products:null, sales:null, stock:null },
+  sheetsConfirmed: false,
   files:     { products:null, stock:null, sales:null },
-  names:     { products:null, stock:null, sales:null },
   maps:      { products:{},   stock:{},   sales:{} },
   confirmed: { products:false, stock:false, sales:false },
   results:   [],
+  elapsedDays: 0,
   view:      'upload',
 };
 
@@ -504,7 +522,6 @@ const S = {
 ══════════════════════════════════════════ */
 function init() {
   buildNav();
-  buildUploadGrid();
   updateSidebarFoot();
   switchView('upload');
 }
@@ -567,96 +584,236 @@ function updateTopPills() {
 }
 
 /* ══════════════════════════════════════════
-   UPLOAD GRID
+   SINGLE FILE UPLOAD
 ══════════════════════════════════════════ */
-function buildUploadGrid() {
-  const grid = document.getElementById('uploadGrid');
-  grid.innerHTML = '';
-  FILE_DEFS.forEach(f => {
-    const card = document.createElement('div');
-    card.className = 'upload-card';
-    card.innerHTML = `
-      <div class="upload-drop" id="drop-${f.key}"
-           onclick="pickFile('${f.key}')"
-           ondragover="onDragOver(event,'${f.key}')"
-           ondragleave="onDragLeave(event,'${f.key}')"
-           ondrop="onDrop(event,'${f.key}')">
-        <span class="ud-badge ${f.required ? 'ud-req' : 'ud-opt'}">${f.required ? 'Zorunlu' : 'İsteğe bağlı'}</span>
-        <div class="ud-icon" id="icon-${f.key}">${f.icon}</div>
-        <div class="ud-title">${f.title}</div>
-        <div class="ud-desc" id="desc-${f.key}">${f.desc}</div>
-      </div>`;
-    grid.appendChild(card);
-  });
-}
-
-function onDragOver(e, key) {
+function onSingleDragOver(e) {
   e.preventDefault();
-  document.getElementById('drop-' + key).classList.add('dragover');
+  document.getElementById('dropSingle').classList.add('dragover');
 }
-function onDragLeave(e, key) {
-  document.getElementById('drop-' + key).classList.remove('dragover');
+function onSingleDragLeave(e) {
+  document.getElementById('dropSingle').classList.remove('dragover');
 }
-function onDrop(e, key) {
+function onSingleDrop(e) {
   e.preventDefault();
-  document.getElementById('drop-' + key).classList.remove('dragover');
-  if (e.dataTransfer.files[0]) handleFile(key, e.dataTransfer.files[0]);
+  document.getElementById('dropSingle').classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleSingleFile(e.dataTransfer.files[0]);
 }
-function pickFile(key) {
+function pickSingleFile() {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
-  inp.onchange = e => { if (e.target.files[0]) handleFile(key, e.target.files[0]); };
+  inp.type = 'file'; inp.accept = '.xlsx,.xls';
+  inp.onchange = e => { if (e.target.files[0]) handleSingleFile(e.target.files[0]); };
   inp.click();
 }
 
-/* ══════════════════════════════════════════
-   FILE PARSING
-══════════════════════════════════════════ */
-async function handleFile(key, file) {
-  const dropEl = document.getElementById('drop-' + key);
-  dropEl.style.opacity = '0.6';
+async function handleSingleFile(file) {
+  const drop = document.getElementById('dropSingle');
+  drop.style.opacity = '0.6';
   try {
-    const rows = await parseExcel(file);
-    if (!rows || rows.length === 0) throw new Error('Dosya boş veya okunamadı');
+    const wb = await readWorkbook(file);
+    if (!wb.SheetNames.length) throw new Error('Excel dosyasında sekme bulunamadı');
 
-    S.files[key] = rows;
-    S.names[key] = file.name;
-    S.confirmed[key] = false;
+    S.workbook   = wb;
+    S.fileName   = file.name;
+    S.sheetNames = wb.SheetNames;
+    S.sheetAssign    = { products:null, sales:null, stock:null };
+    S.sheetsConfirmed = false;
+    S.files      = { products:null, stock:null, sales:null };
+    S.confirmed  = { products:false, stock:false, sales:false };
 
-    dropEl.classList.remove('error');
-    dropEl.classList.add('loaded');
-    document.getElementById('icon-' + key).textContent = '✅';
-    document.getElementById('desc-' + key).innerHTML =
-      `<span class="ud-fname">${esc(file.name)}</span>` +
-      `<br><span style="font-size:11px;color:var(--green);margin-top:4px;display:inline-block;">${rows.length} satır yüklendi</span>`;
+    drop.classList.remove('error');
+    drop.classList.add('loaded');
+    drop.querySelector('.ud-icon').textContent = '✅';
+    drop.querySelector('.ud-title').textContent = file.name;
+    drop.querySelector('.ud-desc').innerHTML =
+      `<span class="ud-fname">${wb.SheetNames.length} sekme bulundu: ${wb.SheetNames.map(s=>'<em>'+esc(s)+'</em>').join(' · ')}</span>`;
 
-    const def = FILE_DEFS.find(f => f.key === key);
-    const detected = autoDetect(rows, def.fields);
-    S.maps[key] = detected;
-    renderMapping(key, rows, def, detected);
-    updateStepChips();
+    renderSheetAssign();
+    setChip('chip-1', 'done');
+    setChip('chip-2', 'active');
     checkReady();
-  } catch (err) {
-    dropEl.classList.add('error');
-    document.getElementById('icon-' + key).textContent = '❌';
-    document.getElementById('desc-' + key).textContent = 'Hata: ' + err.message;
+  } catch(err) {
+    drop.classList.add('error');
+    drop.querySelector('.ud-icon').textContent = '❌';
+    drop.querySelector('.ud-title').textContent = 'Hata';
+    drop.querySelector('.ud-desc').textContent = err.message;
   }
-  dropEl.style.opacity = '1';
+  drop.style.opacity = '1';
 }
 
-function parseExcel(file) {
+function readWorkbook(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        resolve(XLSX.utils.sheet_to_json(ws, { defval:'' }));
-      } catch (err) { reject(err); }
+      try { resolve(XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true })); }
+      catch(err) { reject(err); }
     };
     reader.onerror = () => reject(new Error('Dosya okunamadı'));
     reader.readAsArrayBuffer(file);
   });
+}
+
+/* ══════════════════════════════════════════
+   SHEET ASSIGNMENT
+══════════════════════════════════════════ */
+function autoAssignSheets() {
+  const kw = {
+    products: ['sipari','ürün','urun','kalem','liste','list','product','item','stok kod'],
+    sales:    ['satış','satis','sale','satiş'],
+    stock:    ['stok','stock','envanter','depo','inventory','mevcut'],
+  };
+  const assign = { products:null, sales:null, stock:null };
+  S.sheetNames.forEach(name => {
+    const nl = normalize(name);
+    for (const [key, cands] of Object.entries(kw)) {
+      if (!assign[key] && cands.some(c => nl.includes(c))) { assign[key] = name; break; }
+    }
+  });
+  return assign;
+}
+
+function renderSheetAssign() {
+  const auto = autoAssignSheets();
+  S.sheetAssign = auto;
+
+  const defs = [
+    { key:'products', label:'📦 Ürün / Sipariş Sekmesi', required:true  },
+    { key:'sales',    label:'📈 Satış Sekmesi',           required:true  },
+    { key:'stock',    label:'🗃️ Stok Sekmesi',            required:false },
+  ];
+
+  const opts = (sel) =>
+    `<option value="">— Seçin —</option>` +
+    S.sheetNames.map(s =>
+      `<option value="${esc(s)}"${s===sel?' selected':''}>${esc(s)}</option>`
+    ).join('');
+
+  document.getElementById('sheetAssignArea').innerHTML = `
+    <div class="col-map-card" id="sheetCard">
+      <div class="col-map-head">
+        <h3>📋 Sekme Ataması</h3>
+        <span class="file-tag">${esc(S.fileName)}</span>
+      </div>
+      <p style="font-size:13px;color:var(--mid);margin-bottom:16px;line-height:1.7;">
+        Excel dosyanızdaki <strong>${S.sheetNames.length}</strong> sekme bulundu.
+        Her veri tipine uygun sekmeyi seçin:
+      </p>
+      <div class="col-map-grid">
+        ${defs.map(d=>`
+          <div class="map-field">
+            <label>${d.label} ${d.required?'<span class="req-star">*</span>':'<span class="opt-tag">(opsiyonel)</span>'}</label>
+            <select id="sheet-${d.key}" onchange="onSheetChange()">
+              ${opts(auto[d.key])}
+            </select>
+          </div>`).join('')}
+      </div>
+      <div id="sheetChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-orange" id="btnConfirmSheets" onclick="confirmSheets()">✅ Sekmeleri Onayla</button>
+        <button class="btn btn-sm btn-ghost" onclick="resetUpload()">🔄 Farklı Dosya Seç</button>
+      </div>
+    </div>`;
+
+  renderSheetChips();
+
+  // Auto-confirm if both required sheets found
+  if (auto.products && auto.sales) setTimeout(() => confirmSheets(true), 100);
+}
+
+function renderSheetChips() {
+  const el = document.getElementById('sheetChips');
+  if (!el) return;
+  const rev = {};
+  Object.entries(S.sheetAssign).filter(([,v])=>v).forEach(([k,v]) => rev[v]=k);
+  const lbl = { products:'📦 Ürün', sales:'📈 Satış', stock:'🗃️ Stok' };
+  el.innerHTML = S.sheetNames.map(s => {
+    const role = rev[s];
+    const st = role
+      ? 'background:var(--accent-glow);color:var(--accent);border-color:rgba(232,114,58,0.3);'
+      : 'background:rgba(255,255,255,0.03);color:var(--dim);border-color:var(--border);';
+    return `<span class="sheet-chip" style="${st}">${esc(s)}${role?' · '+lbl[role]:''}</span>`;
+  }).join('');
+}
+
+function onSheetChange() {
+  S.sheetAssign = {
+    products: document.getElementById('sheet-products')?.value || null,
+    sales:    document.getElementById('sheet-sales')?.value    || null,
+    stock:    document.getElementById('sheet-stock')?.value    || null,
+  };
+  S.sheetsConfirmed = false;
+  S.files     = { products:null, stock:null, sales:null };
+  S.confirmed = { products:false, stock:false, sales:false };
+  document.getElementById('mapArea').innerHTML = '';
+  const btn = document.getElementById('btnConfirmSheets');
+  if (btn) { btn.textContent = '✅ Sekmeleri Onayla'; btn.className = 'btn btn-sm btn-orange'; }
+  renderSheetChips();
+  setChip('chip-3', 'pending');
+  setChip('chip-4', 'pending');
+  checkReady();
+}
+
+function confirmSheets(silent = false) {
+  const a = S.sheetAssign;
+  if (!a.products) { alert('Ürün/Sipariş sekmesi seçilmedi'); return; }
+  if (!a.sales)    { alert('Satış sekmesi seçilmedi'); return; }
+
+  const readSheet = (name) => {
+    if (!name) return null;
+    const ws = S.workbook.Sheets[name];
+    return ws ? XLSX.utils.sheet_to_json(ws, { defval:'' }) : null;
+  };
+
+  S.files.products = readSheet(a.products);
+  S.files.sales    = readSheet(a.sales);
+  S.files.stock    = a.stock ? readSheet(a.stock) : null;
+
+  if (!S.files.products?.length) { alert('Ürün/Sipariş sekmesi boş veya okunamadı'); return; }
+  if (!S.files.sales?.length)    { alert('Satış sekmesi boş veya okunamadı'); return; }
+
+  S.sheetsConfirmed = true;
+  S.confirmed = { products:false, stock:!a.stock, sales:false }; // stock optional
+
+  if (!silent) {
+    const btn = document.getElementById('btnConfirmSheets');
+    if (btn) { btn.textContent = '✅ Onaylandı'; btn.className = 'btn btn-sm btn-confirmed'; }
+  }
+
+  setChip('chip-2', 'done');
+  setChip('chip-3', 'active');
+
+  // Render column mapping for each assigned sheet
+  document.getElementById('mapArea').innerHTML = '';
+  FILE_DEFS.forEach(def => {
+    if (!S.files[def.key]) return;
+    const detected = autoDetect(S.files[def.key], def.fields);
+    S.maps[def.key] = detected;
+    renderMapping(def.key, S.files[def.key], def, detected, S.sheetAssign[def.key]);
+  });
+
+  updateStepChips();
+  checkReady();
+}
+
+function resetUpload() {
+  S.workbook = null; S.fileName = null; S.sheetNames = [];
+  S.sheetAssign = { products:null, sales:null, stock:null };
+  S.sheetsConfirmed = false;
+  S.files     = { products:null, stock:null, sales:null };
+  S.confirmed = { products:false, stock:false, sales:false };
+
+  const drop = document.getElementById('dropSingle');
+  drop.classList.remove('loaded', 'error');
+  drop.querySelector('.ud-icon').textContent = '📊';
+  drop.querySelector('.ud-title').textContent = 'Excel Dosyanızı Yükleyin';
+  drop.querySelector('.ud-desc').innerHTML =
+    'Tek bir <strong>.xlsx</strong> dosyası içinde 3 sekme:<br>' +
+    '<strong>Sipariş / Ürün Listesi · Satış Raporu · Stok</strong>';
+
+  document.getElementById('sheetAssignArea').innerHTML = '';
+  document.getElementById('mapArea').innerHTML = '';
+  ['chip-1','chip-2','chip-3','chip-4'].forEach((c,i) =>
+    setChip(c, i===0 ? 'active' : 'pending'));
+  checkReady();
 }
 
 /* ══════════════════════════════════════════
@@ -684,7 +841,7 @@ function normalize(s) {
 /* ══════════════════════════════════════════
    COLUMN MAPPING UI
 ══════════════════════════════════════════ */
-function renderMapping(key, rows, def, detected) {
+function renderMapping(key, rows, def, detected, sheetName) {
   const mapArea = document.getElementById('mapArea');
   const existing = document.getElementById('map-' + key);
   if (existing) existing.remove();
@@ -725,26 +882,22 @@ function renderMapping(key, rows, def, detected) {
   div.innerHTML = `
     <div class="col-map-head">
       <h3>${def.icon} ${def.title}</h3>
-      <span class="file-tag">${esc(S.names[key])}</span>
+      <span class="file-tag">Sekme: ${esc(sheetName || key)}</span>
       <span class="map-status" id="mstatus-${key}" style="color:var(--yellow);">⚠️ Sütunları doğrulayın</span>
     </div>
     <div class="col-map-grid">${fieldsHtml}</div>
     <details>
-      <summary>📄 Dosya önizlemesi (ilk ${Math.min(5, rows.length)} satır)</summary>
+      <summary>📄 Sekme önizlemesi (ilk ${Math.min(5, rows.length)} satır, ${rows.length} toplam)</summary>
       ${previewHtml}
     </details>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
       <button class="btn btn-sm btn-orange" id="btnConfirm-${key}" onclick="confirmMap('${key}')">
         ✅ Sütunları Onayla
       </button>
-      <button class="btn btn-sm btn-ghost" onclick="reupload('${key}')">
-        🔄 Dosyayı Değiştir
-      </button>
     </div>`;
 
   mapArea.appendChild(div);
 
-  // Auto-confirm if all required fields are matched
   const allOk = def.fields.filter(f => f.required).every(f => detected[f.id] !== '__none__');
   if (allOk) setTimeout(() => confirmMap(key, true), 80);
 }
@@ -788,39 +941,18 @@ function confirmMap(key, silent = false) {
   checkReady();
 }
 
-function reupload(key) {
-  S.files[key] = null;
-  S.names[key] = null;
-  S.maps[key]  = {};
-  S.confirmed[key] = false;
-
-  const def = FILE_DEFS.find(f => f.key === key);
-  const drop = document.getElementById('drop-' + key);
-  drop.classList.remove('loaded', 'error');
-  document.getElementById('icon-' + key).textContent = def.icon;
-  document.getElementById('desc-' + key).textContent = def.desc;
-
-  const card = document.getElementById('map-' + key);
-  if (card) card.remove();
-
-  updateStepChips();
-  checkReady();
-}
-
 /* ══════════════════════════════════════════
    STEP CHIPS + READY
 ══════════════════════════════════════════ */
 function updateStepChips() {
-  const hasP = !!S.files.products;
-  const hasS = !!S.files.sales;
-  const both = hasP && hasS;
-  const okP  = both && S.confirmed.products;
-  const okS  = both && S.confirmed.sales;
-  const allOk = okP && okS;
+  const hasFile = !!S.workbook;
+  const sheetsOk = S.sheetsConfirmed;
+  const colsOk   = S.confirmed.products && S.confirmed.sales;
 
-  setChip('chip-1', both ? 'done' : 'active');
-  setChip('chip-2', allOk ? 'done' : both ? 'active' : 'pending');
-  setChip('chip-3', allOk ? 'active' : 'pending');
+  setChip('chip-1', hasFile  ? 'done' : 'active');
+  setChip('chip-2', sheetsOk ? 'done' : hasFile  ? 'active' : 'pending');
+  setChip('chip-3', colsOk   ? 'done' : sheetsOk ? 'active' : 'pending');
+  setChip('chip-4', colsOk   ? 'active' : 'pending');
 }
 
 function setChip(id, status) {
@@ -840,12 +972,12 @@ function checkReady() {
     area.innerHTML = '<div class="ready-box">✅ <strong>Hazır!</strong> Analizi başlatabilirsiniz.</div>';
   } else {
     const missing = [];
-    if (!S.files.products)      missing.push('Ürün Listesi yüklenmedi');
-    else if (!S.confirmed.products) missing.push('Ürün Listesi sütunları onaylanmadı');
-    if (!S.files.sales)         missing.push('Satış Raporu yüklenmedi');
-    else if (!S.confirmed.sales)    missing.push('Satış Raporu sütunları onaylanmadı');
+    if (!S.workbook)                missing.push('Excel dosyası yüklenmedi');
+    else if (!S.sheetsConfirmed)    missing.push('Sekmeler atanmadı');
+    else if (!S.confirmed.products) missing.push('Ürün/Sipariş sütunları onaylanmadı');
     area.innerHTML = `<div class="info-box">💡 Eksik: <strong>${missing.join(' · ')}</strong></div>`;
   }
+  updateStepChips();
 }
 
 /* ══════════════════════════════════════════
