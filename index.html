@@ -605,6 +605,22 @@ details[open] summary { color:var(--mid); }
     <!-- ══ ORDER LIST ══ -->
     <div class="section" id="sec-order">
 
+      <!-- Export bar — ÜSTTE -->
+      <div id="orderExportBar" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:16px;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:160px;">
+          <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">📥 Dışa Aktar</div>
+          <div id="orderExportHint" style="font-size:13px;color:var(--mid);"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-green" id="btnExportSel" onclick="exportOrder('selected')">
+            📦 Seçili Siparişler
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="exportOrder('all')">
+            📋 Tüm Sipariş Formu
+          </button>
+        </div>
+      </div>
+
       <!-- KPI strip -->
       <div class="stat-grid" id="orderKpi" style="margin-bottom:16px;"></div>
 
@@ -634,21 +650,6 @@ details[open] summary { color:var(--mid); }
         <div class="placeholder">
           <div class="p-ico">🛒</div>
           <div class="p-txt">Analiz başlatılmadı.<br>Dosya yükleyip analizi çalıştırın.</div>
-        </div>
-      </div>
-
-      <!-- Export bar -->
-      <div id="orderExportBar" style="display:none;padding:20px 0;border-top:1px solid var(--border);margin-top:8px;gap:12px;flex-wrap:wrap;align-items:center;">
-        <div style="flex:1;min-width:160px;">
-          <div class="info-box" id="orderExportHint"></div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-green" id="btnExportSel" onclick="exportOrder('selected')">
-            📦 Seçili Siparişler
-          </button>
-          <button class="btn btn-sm btn-ghost" onclick="exportOrder('all')">
-            📋 Tüm Sipariş Formu
-          </button>
         </div>
       </div>
 
