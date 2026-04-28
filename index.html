@@ -695,43 +695,39 @@ const FILE_DEFS = [
     required: true,
     fields: [
       { id:'code',     label:'Ürün Kodu (Kodlama)', required:true,
-        cands:['ürün kodu','sku','kod','code','id','stok kodu','ürün no','urun kodu','kodlama'] },
+        cands:['kodlama','ürün kodu','sku','kod','code','id','stok kodu','ürün no','urun kodu','urun no'] },
       { id:'barcode',  label:'Barkod',              required:false,
-        cands:['barkod','barcode','ean','upc','barkodu'] },
+        cands:['barcode','barkod','ean','upc','barkodu'] },
       { id:'name',     label:'Ürün Adı (Açıklama)', required:true,
-        cands:['ürün adı','ürün adi','ad','isim','name','açıklama','aciklama','ürün','urun'] },
+        cands:['aciklama','açıklama','ürün adı','ürün adi','ad','isim','name','ürün','urun'] },
       { id:'category', label:'Kategori',             required:false,
-        cands:['kategori','grup','category','tür','tur','tip','grup adı','grup adi'] },
-      { id:'price',    label:'Birim Fiyat',          required:false,
-        cands:['fiyat','birim fiyat','price','tutar','satış fiyatı','satis fiyati','liste fiyatı'] },
+        cands:['reyon adi','reyon','reyon adı','kategori','grup','category','tür','tur','tip','grup adı','grup adi'] },
     ],
   },
   {
     key: 'stock',
     icon: '🗃️',
     title: 'Stok Listesi',
-    desc: 'Ürün bazlı mevcut stok miktarları',
+    desc: 'Ürün bazlı mevcut stok miktarları (Excel veya CSV)',
     required: false,
     fields: [
       { id:'code', label:'Ürün Kodu / Barkod', required:true,
-        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
+        cands:['ürün kodu','barkod','barcode','sku','kod','code','id','stok kodu','ürün no','urun kodu','no','kodlama'] },
       { id:'qty',  label:'Stok Adedi',          required:true,
-        cands:['stok','stok adedi','adet','miktar','quantity','stock','mevcut stok','mevcut','stok miktarı'] },
+        cands:['mağaza stok','magaza stok','stok','stok adedi','adet','miktar','quantity','stock','mevcut stok','mevcut','stok miktarı'] },
     ],
   },
   {
     key: 'sales',
     icon: '📈',
     title: 'Satış Raporu',
-    desc: "Ürün bazlı satış adetleri (Mart'tan itibaren)",
+    desc: 'Ürün bazlı satış adetleri (Excel veya CSV)',
     required: true,
     fields: [
       { id:'code', label:'Ürün Kodu / Barkod',  required:true,
-        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
+        cands:['urunkodu','ürün kodu','barkod','barcode','sku','kod','code','id','stok kodu','ürün no','urun kodu','kodlama'] },
       { id:'qty',  label:'Satış Adedi',           required:true,
         cands:['satış adedi','satis adedi','adet','miktar','toplam','satış','satis','quantity','satılan','satilan','satış miktarı'] },
-      { id:'date', label:'Tarih (isteğe bağlı)', required:false,
-        cands:['tarih','date','gün','gun','day','işlem tarihi','satış tarihi','satis tarihi'] },
     ],
   },
 ];
@@ -897,7 +893,8 @@ function onDrop(e, key) {
 }
 function pickFile(key) {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.xlsx,.xls';
+  inp.type = 'file';
+  inp.accept = key === 'products' ? '.xlsx,.xls' : '.xlsx,.xls,.csv';
   inp.onchange = e => { if (e.target.files[0]) handleFile(key, e.target.files[0]); };
   inp.click();
 }
@@ -958,12 +955,18 @@ async function handleFile(key, file) {
 function readWorkbook(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    const isCsv = /\.csv$/i.test(file.name);
     reader.onload = e => {
-      try { resolve(XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true })); }
-      catch(err) { reject(err); }
+      try {
+        const wb = isCsv
+          ? XLSX.read(e.target.result, { type: 'string' })
+          : XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        resolve(wb);
+      } catch(err) { reject(err); }
     };
     reader.onerror = () => reject(new Error('Dosya okunamadı'));
-    reader.readAsArrayBuffer(file);
+    if (isCsv) reader.readAsText(file, 'utf-8');
+    else        reader.readAsArrayBuffer(file);
   });
 }
 
@@ -973,13 +976,43 @@ function readWorkbook(file) {
 function autoDetect(rows, fields) {
   const headers = Object.keys(rows[0] || {});
   const map = {};
+  const used = new Set();
+
+  // Pass 1: exact match (normalized header === normalized cand)
   fields.forEach(f => {
-    const match = headers.find(h => {
-      const hl = normalize(h);
-      return f.cands.some(c => hl === c || hl.includes(c) || c.includes(hl));
-    });
-    map[f.id] = match || '__none__';
+    const normCands = f.cands.map(normalize);
+    const match = headers.find(h => !used.has(h) && normCands.includes(normalize(h)));
+    if (match) { map[f.id] = match; used.add(match); }
   });
+
+  // Pass 2: substring match for still-unmatched fields
+  fields.forEach(f => {
+    if (map[f.id] !== undefined) return;
+    const normCands = f.cands.map(normalize);
+    const match = headers.find(h => {
+      if (used.has(h)) return false;
+      const hl = normalize(h);
+      return normCands.some(c => hl.includes(c) || c.includes(hl));
+    });
+    if (match) { map[f.id] = match; used.add(match); }
+    else map[f.id] = '__none__';
+  });
+
+  // Pass 3: numeric-column fallback for qty fields still unmatched
+  fields.filter(f => f.id === 'qty' && !map[f.id]).forEach(f => {
+    const sample = rows.slice(0, 20);
+    const numeric = headers.find(h => {
+      if (used.has(h)) return false;
+      const hits = sample.filter(r => { const v = r[h]; return v !== '' && !isNaN(parseFloat(String(v).replace(',', '.'))); }).length;
+      return hits / Math.max(1, sample.length) >= 0.6;
+    });
+    if (numeric) { map[f.id] = numeric; used.add(numeric); }
+    else map[f.id] = '__none__';
+  });
+
+  // Ensure all fields have a value
+  fields.forEach(f => { if (map[f.id] === undefined) map[f.id] = '__none__'; });
+
   return map;
 }
 
