@@ -1707,6 +1707,15 @@ function updateExportHint() {
   if (btnSel) btnSel.disabled = sel.length === 0;
 }
 
+function buildExportNote(p) {
+  if (p.priority === 'ACİL')   return `KRİTİK: ${p.stockDays ?? 0} günde tükenir, acil sipariş`;
+  if (p.priority === 'YÜKSEK') return `${p.stockDays} günde tükenir, yüksek öncelik`;
+  if (p.priority === 'ORTA')   return `${p.stockDays} günde tükenir, orta öncelik`;
+  if (p.priority === 'DÜŞÜK')  return `Stok ${p.stockDays} gün yeterli`;
+  if (p.totalSales === 0)      return `Satış yok — ölü stok, incelenebilir`;
+  return '';
+}
+
 function exportOrder(mode) {
   const today = new Date().toISOString().slice(0, 10);
   const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
@@ -1718,26 +1727,22 @@ function exportOrder(mode) {
       .sort((a, b) => (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9));
     if (!toExport.length) { alert('Seçili ve miktarı > 0 olan ürün yok.'); return; }
   } else {
-    // Full order form: all products sorted by priority
     toExport = S.results.slice().sort((a, b) => (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9));
   }
 
   const rows = toExport.map(p => ({
-    'Ürün Kodu':        p.code,
-    'Ürün Adı':         p.name,
-    'Kategori':         p.category,
-    'Toplam Satış':     p.totalSales,
-    'Günlük Ortalama':  p.dailyAvg,
-    'Mevcut Stok':      p.currentStock,
-    'Stok Günü':        p.stockDays ?? '∞',
-    '15G Tahmin':       p.forecast15,
-    'Sistem Önerisi':   p.orderQty,
-    'Sipariş Miktarı':  mode === 'selected' ? (orderState[p.code]?.qty ?? 0) : p.orderQty,
-    'Öncelik':          p.priority,
+    'Kodlama':         p.code,
+    'Barkod':          p.barcode || '',
+    'Açıklama':        p.name,
+    'Stok':            p.currentStock,
+    'Toplam Satış':    p.totalSales,
+    'Sipariş Önerisi': p.orderQty,
+    'Sipariş':         '',
+    'Not':             buildExportNote(p),
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [10,30,16,12,14,12,10,12,14,14,10].map(w => ({ wch: w }));
+  ws['!cols'] = [14, 16, 36, 10, 12, 14, 12, 40].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sipariş');
   const fname = mode === 'selected' ? `siparis_${today}.xlsx` : `tam_form_${today}.xlsx`;
