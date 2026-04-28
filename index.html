@@ -440,6 +440,25 @@ details[open] summary { color:var(--mid); }
         <div class="step-chip pending" id="chip-3">🚀 3. Analizi Başlat</div>
       </div>
 
+      <!-- Mağaza açılış tarihi -->
+      <div class="sec-card" style="margin-bottom:16px;padding:16px 22px;">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">
+              📅 Mağaza / Sezon Açılış Tarihi
+            </label>
+            <input type="date" id="openingDateInput"
+              style="padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+                     background:rgba(255,255,255,0.03);color:var(--text);font-family:var(--font);
+                     font-size:14px;outline:none;transition:border-color .15s;"
+              onfocus="this.style.borderColor='var(--accent)'"
+              onblur="this.style.borderColor='var(--border)'"
+              onchange="onOpeningDateChange()">
+          </div>
+          <div style="font-size:13px;color:var(--mid);" id="elapsedInfo"></div>
+        </div>
+      </div>
+
       <!-- 3 ayrı upload zone -->
       <div class="upload-grid">
         <div>
@@ -670,9 +689,11 @@ const FILE_DEFS = [
     desc: 'Ürün kodu, adı ve kategori bilgileri',
     required: true,
     fields: [
-      { id:'code',     label:'Ürün Kodu / Barkod',  required:true,
-        cands:['ürün kodu','barkod','sku','kod','code','id','stok kodu','ürün no','urun kodu'] },
-      { id:'name',     label:'Ürün Adı',             required:true,
+      { id:'code',     label:'Ürün Kodu (Kodlama)', required:true,
+        cands:['ürün kodu','sku','kod','code','id','stok kodu','ürün no','urun kodu','kodlama'] },
+      { id:'barcode',  label:'Barkod',              required:false,
+        cands:['barkod','barcode','ean','upc','barkodu'] },
+      { id:'name',     label:'Ürün Adı (Açıklama)', required:true,
         cands:['ürün adı','ürün adi','ad','isim','name','açıklama','aciklama','ürün','urun'] },
       { id:'category', label:'Kategori',             required:false,
         cands:['kategori','grup','category','tür','tur','tip','grup adı','grup adi'] },
@@ -714,12 +735,13 @@ const FILE_DEFS = [
    STATE
 ══════════════════════════════════════════ */
 const S = {
-  files:     { products:null, stock:null, sales:null },
-  maps:      { products:{},   stock:{},   sales:{} },
-  confirmed: { products:false, stock:false, sales:false },
-  results:   [],
+  files:       { products:null, stock:null, sales:null },
+  maps:        { products:{},   stock:{},   sales:{} },
+  confirmed:   { products:false, stock:false, sales:false },
+  results:     [],
   elapsedDays: 0,
-  view:      'upload',
+  openingDate: null,   // Date object — mağaza açılış tarihi
+  view:        'upload',
 };
 
 /* ══════════════════════════════════════════
@@ -730,6 +752,7 @@ function saveToStorage() {
     localStorage.setItem('mkt_results', JSON.stringify(S.results));
     localStorage.setItem('mkt_elapsed', String(S.elapsedDays));
     localStorage.setItem('mkt_order_state', JSON.stringify(orderState));
+    if (S.openingDate) localStorage.setItem('mkt_opening_date', S.openingDate.toISOString().slice(0,10));
   } catch(e) { console.warn('localStorage kayıt hatası', e); }
 }
 
@@ -747,12 +770,44 @@ function loadFromStorage() {
   } catch(e) { return false; }
 }
 
+function initOpeningDate() {
+  const stored = localStorage.getItem('mkt_opening_date');
+  const today = new Date();
+  const defaultDate = new Date(today.getFullYear(), 2, 1).toISOString().slice(0,10);
+  const dateStr = stored || defaultDate;
+  document.getElementById('openingDateInput').value = dateStr;
+  S.openingDate = new Date(dateStr + 'T00:00:00');
+  updateElapsedInfo();
+  updateSidebarFoot();
+}
+
+function onOpeningDateChange() {
+  const val = document.getElementById('openingDateInput').value;
+  if (!val) return;
+  S.openingDate = new Date(val + 'T00:00:00');
+  localStorage.setItem('mkt_opening_date', val);
+  updateElapsedInfo();
+  updateSidebarFoot();
+}
+
+function updateElapsedInfo() {
+  const el = document.getElementById('elapsedInfo');
+  if (!el || !S.openingDate) return;
+  const today = new Date();
+  const elapsed = Math.max(1, Math.round((today - S.openingDate) / 86400000));
+  const d = S.openingDate;
+  const fmt = `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
+  el.innerHTML = `<span style="color:var(--green);font-weight:700;">${elapsed} gün</span>
+    <span style="color:var(--dim);font-size:12px;"> — ${fmt} tarihinden bugüne</span>`;
+}
+
 /* ══════════════════════════════════════════
    INIT
 ══════════════════════════════════════════ */
 function init() {
   buildNav();
   updateSidebarFoot();
+  initOpeningDate();
   if (loadFromStorage()) {
     renderDashboard();
     renderTable();
@@ -799,15 +854,15 @@ function updateSidebarFoot() {
   const today = new Date();
   const m = today.getMonth() + 1;
   const mNames = ['','Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-  const seasonEnd = new Date(today.getFullYear(), 10, 30);
-  const diff = Math.max(0, Math.round((seasonEnd - today) / 86400000));
-  const inSeason = m >= 3 && m <= 11;
+  const start = S.openingDate;
+  const elapsed = start ? Math.max(1, Math.round((today - start) / 86400000)) : '—';
+  const startFmt = start
+    ? `${start.getDate()} ${mNames[start.getMonth()+1]}`
+    : 'belirsiz';
   document.getElementById('sidebarFoot').innerHTML =
-    `Sezon: Mar – Kas<br>` +
     `Bugün: ${mNames[m]} ${today.getDate()}<br>` +
-    (inSeason
-      ? `<span style="color:var(--green)">✅ Sezon aktif — ${diff} gün kaldı</span>`
-      : `<span style="color:var(--dim)">❄️ Sezon dışı</span>`);
+    `Açılış: ${startFmt}<br>` +
+    `<span style="color:var(--green)">📅 ${elapsed} gün veri</span>`;
 }
 
 function updateTopPills() {
@@ -1088,10 +1143,9 @@ function startAnalysis() {
 }
 
 function runAnalysis() {
-  // Elapsed days from March 1 of current year to today
-  const today      = new Date();
-  const seasonStart = new Date(today.getFullYear(), 2, 1); // March 1
-  const elapsedDays = Math.max(1, Math.round((today - seasonStart) / 86400000));
+  const today     = new Date();
+  const startDate = S.openingDate || new Date(today.getFullYear(), 2, 1);
+  const elapsedDays = Math.max(1, Math.round((today - startDate) / 86400000));
   S.elapsedDays = elapsedDays;
 
   // Build lookup maps
@@ -1101,6 +1155,7 @@ function runAnalysis() {
   // Process products
   S.results = S.files.products.map(row => {
     const code     = rowVal(row, S.maps.products.code);
+    const barcode  = rowVal(row, S.maps.products.barcode) || '';
     const name     = rowVal(row, S.maps.products.name)     || code;
     const category = rowVal(row, S.maps.products.category) || '-';
     const price    = parseNum(rowVal(row, S.maps.products.price));
@@ -1134,7 +1189,7 @@ function runAnalysis() {
     }
 
     return {
-      code, name, category, price,
+      code, barcode, name, category, price,
       totalSales, currentStock,
       dailyAvg: Math.round(dailyAvg * 100) / 100,
       forecast15, orderQty,
