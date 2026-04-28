@@ -356,6 +356,16 @@ details[open] summary { color:var(--mid); }
 .qty-input:disabled { opacity:.3; cursor:not-allowed; }
 .order-cb { width:16px; height:16px; accent-color:var(--green); cursor:pointer; }
 
+/* ─── ORDER TABS ─── */
+.order-tab {
+  padding:6px 16px; border-radius:20px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.02); color:var(--dim); font-family:var(--font);
+  font-size:12px; font-weight:700; cursor:pointer; transition:all .15s;
+}
+.order-tab:hover { background:rgba(255,255,255,0.05); color:var(--mid); }
+.order-tab.active { background:var(--accent-glow); border-color:rgba(255,107,0,0.3); color:var(--accent); }
+.order-tab.tab-green { background:var(--green-bg); border-color:rgba(0,212,138,0.3); color:var(--green); }
+
 /* ─── AI OUTPUT ─── */
 .ai-output {
   white-space: pre-wrap; word-break: break-word;
@@ -579,6 +589,15 @@ details[open] summary { color:var(--mid); }
       <!-- KPI strip -->
       <div class="stat-grid" id="orderKpi" style="margin-bottom:16px;"></div>
 
+      <!-- Filter tabs -->
+      <div id="orderTabsWrap" style="display:none;margin-bottom:14px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="order-tab active" id="otab-all"   onclick="setOrderTab('all')">📋 Tümü</button>
+          <button class="order-tab"        id="otab-order" onclick="setOrderTab('order')">🛒 Sipariş Önerileri</button>
+          <button class="order-tab"        id="otab-dead"  onclick="setOrderTab('dead')">💀 Ölü Stok</button>
+        </div>
+      </div>
+
       <!-- Toolbar -->
       <div id="orderToolbar" style="display:none;margin-bottom:14px;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -600,14 +619,18 @@ details[open] summary { color:var(--mid); }
       </div>
 
       <!-- Export bar -->
-      <div id="orderExportBar" style="display:none;padding:20px 0;border-top:1px solid var(--border);margin-top:8px;display:none;gap:12px;flex-wrap:wrap;align-items:center;">
+      <div id="orderExportBar" style="display:none;padding:20px 0;border-top:1px solid var(--border);margin-top:8px;gap:12px;flex-wrap:wrap;align-items:center;">
         <div style="flex:1;min-width:160px;">
           <div class="info-box" id="orderExportHint"></div>
         </div>
-        <button class="btn btn-lg btn-green" id="btnExport"
-          onclick="exportOrder()">
-          📥 Sipariş Listesini Excel'e İndir
-        </button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-green" id="btnExportSel" onclick="exportOrder('selected')">
+            📦 Seçili Siparişler
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="exportOrder('all')">
+            📋 Tüm Sipariş Formu
+          </button>
+        </div>
       </div>
 
     </div>
@@ -1409,46 +1432,68 @@ function buildTop10Chart() {
 
 // Per-product order state: { code → { checked, qty } }
 let orderState = {};
+let orderTabFilter = 'all';
 
 function renderOrderSection() {
-  const candidates = S.results.filter(r => r.orderQty > 0);
-
-  // Init order state (preserve if already set)
-  candidates.forEach(p => {
+  // Init orderState for ALL products (checked only if orderQty > 0)
+  S.results.forEach(p => {
     if (!orderState[p.code]) {
-      orderState[p.code] = { checked: true, qty: p.orderQty };
+      orderState[p.code] = { checked: p.orderQty > 0, qty: p.orderQty };
     }
   });
 
   updateOrderKpi();
 
-  if (!candidates.length) {
+  if (!S.results.length) {
     document.getElementById('orderTableWrap').innerHTML = `
       <div class="placeholder">
-        <div class="p-ico">✅</div>
-        <div class="p-txt">Sipariş önerisi olan ürün bulunamadı.<br>Tüm ürünler yeterli stoka sahip.</div>
+        <div class="p-ico">🛒</div>
+        <div class="p-txt">Analiz başlatılmadı.<br>Dosya yükleyip analizi çalıştırın.</div>
       </div>`;
-    document.getElementById('orderToolbar').style.display = 'none';
-    document.getElementById('orderExportBar').style.display = 'none';
     return;
   }
 
+  document.getElementById('orderTabsWrap').style.display = 'block';
   document.getElementById('orderToolbar').style.display = 'block';
   document.getElementById('orderExportBar').style.display = 'flex';
 
-  renderOrderTable(candidates);
+  renderOrderTable();
   updateOrderSelCount();
   updateExportHint();
 }
 
-function renderOrderTable(candidates) {
-  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3 };
+function setOrderTab(tab) {
+  orderTabFilter = tab;
+  document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active', 'tab-green'));
+  const el = document.getElementById('otab-' + tab);
+  if (el) {
+    el.classList.add('active');
+    if (tab === 'order') el.classList.add('tab-green');
+  }
+  renderOrderTable();
+}
+
+function renderOrderTable() {
+  let candidates = S.results;
+  if (orderTabFilter === 'order') candidates = S.results.filter(r => r.orderQty > 0);
+  if (orderTabFilter === 'dead')  candidates = S.results.filter(r => r.totalSales === 0);
+
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
   const sorted = candidates.slice().sort((a, b) =>
     (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9) || b.orderQty - a.orderQty
   );
 
+  if (!sorted.length) {
+    document.getElementById('orderTableWrap').innerHTML = `
+      <div class="placeholder">
+        <div class="p-ico">📭</div>
+        <div class="p-txt">Bu filtrede ürün bulunamadı.</div>
+      </div>`;
+    return;
+  }
+
   const rows = sorted.map(p => {
-    const st  = orderState[p.code] || { checked: true, qty: p.orderQty };
+    const st  = orderState[p.code] || { checked: p.orderQty > 0, qty: p.orderQty };
     const cls = st.checked ? 'row-checked' : 'row-unchecked';
     return `<tr id="orow-${esc(p.code)}" class="${cls}">
       <td style="text-align:center;">
@@ -1459,10 +1504,10 @@ function renderOrderTable(candidates) {
       <td class="td-name" title="${esc(p.name)}">${esc(p.name)}</td>
       <td class="td-code">${esc(p.code)}</td>
       <td style="color:var(--mid);font-size:12px;">${esc(p.category)}</td>
-      <td class="td-num" style="color:var(--green);">${p.totalSales}</td>
+      <td class="td-num" style="color:${p.totalSales>0?'var(--green)':'var(--dim)'};">${p.totalSales || '—'}</td>
       <td class="td-num" style="color:var(--mid);">${p.dailyAvg}</td>
       <td class="td-num">${p.currentStock}</td>
-      <td class="td-num" style="color:var(--accent);">${p.forecast15}</td>
+      <td class="td-num" style="color:var(--accent);">${p.forecast15 || '—'}</td>
       <td style="color:var(--dim);font-size:11px;">
         ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
       </td>
@@ -1487,7 +1532,7 @@ function renderOrderTable(candidates) {
             <th>Ürün Adı</th><th>Kod</th><th>Kategori</th>
             <th>Top. Satış</th><th>Günlük Ort.</th><th>Stok</th><th>15G Tahmin</th>
             <th>Stok Günü</th>
-            <th>Sipariş Miktarı<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--dim);">Düzenleyebilirsiniz</span></th>
+            <th>Sipariş Miktarı</th>
             <th>Öncelik</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -1564,47 +1609,46 @@ function orderResetQty() {
 }
 
 function updateOrderKpi() {
-  const selected  = Object.values(orderState).filter(s => s.checked);
-  const totalQty  = selected.reduce((sum, s) => sum + s.qty, 0);
-  const urgentCnt = S.results.filter(p =>
-    orderState[p.code]?.checked && p.priority === 'ACİL'
-  ).length;
-  const allCnt = Object.keys(orderState).length;
+  const allCnt    = S.results.length;
+  const withOrder = S.results.filter(p => p.orderQty > 0).length;
+  const deadCnt   = S.results.filter(p => p.totalSales === 0).length;
+  const selected  = S.results.filter(p => orderState[p.code]?.checked);
+  const totalQty  = selected.reduce((sum, p) => sum + (orderState[p.code]?.qty || 0), 0);
+  const urgentCnt = S.results.filter(p => orderState[p.code]?.checked && p.priority === 'ACİL').length;
 
   document.getElementById('orderKpi').innerHTML = [
-    kpiCard('Toplam Kalem',    allCnt,    '📦', ''),
-    kpiCard('Seçili Kalem',   selected.length, '☑️', 'var(--green)'),
-    kpiCard('Toplam Adet',    totalQty.toLocaleString('tr'), '🛒', 'var(--accent)'),
-    kpiCard('Acil Kalem',     urgentCnt, '🚨', 'var(--red)'),
+    kpiCard('Toplam Ürün',     allCnt,                         '📦', ''),
+    kpiCard('Sipariş Gereken', withOrder,                      '🛒', 'c-orange'),
+    kpiCard('Seçili Kalem',    selected.length,                '☑️', 'c-green'),
+    kpiCard('Toplam Adet',     totalQty.toLocaleString('tr'),  '📋', 'c-teal'),
+    kpiCard('Acil Kalem',      urgentCnt,                      '🚨', 'c-red'),
+    kpiCard('Ölü Stok',        deadCnt,                        '💀', 'c-yellow'),
   ].join('');
 }
 
-function kpiCard(label, value, icon, color) {
-  return `<div class="stat-card">
+function kpiCard(label, value, icon, colorCls) {
+  return `<div class="stat-card ${colorCls}">
     <div class="s-label">${label}</div>
-    <div class="s-value" style="color:${color || 'var(--text)'}">${icon} ${value}</div>
+    <div class="s-value">${icon} ${value}</div>
   </div>`;
 }
 
 function updateOrderSelCount() {
-  const sel = Object.values(orderState).filter(s => s.checked).length;
-  const tot = Object.keys(orderState).length;
+  const sel = S.results.filter(p => orderState[p.code]?.checked).length;
+  const tot = S.results.length;
   const el = document.getElementById('orderSelCount');
-  if (el) el.textContent = `${sel} / ${tot} ürün seçili`;
+  if (el) el.textContent = `${sel} / ${tot} seçili`;
 }
 
 function updateExportHint() {
-  const sel = Object.values(orderState).filter(s => s.checked);
-  const qty = sel.reduce((s, x) => s + x.qty, 0);
+  const sel = S.results.filter(p => orderState[p.code]?.checked);
+  const qty = sel.reduce((s, p) => s + (orderState[p.code]?.qty || 0), 0);
   const el  = document.getElementById('orderExportHint');
   if (!el) return;
-  if (!sel.length) {
-    el.textContent = '⚠️ Hiç ürün seçilmedi. En az bir ürün seçin.';
-    document.getElementById('btnExport').disabled = true;
-  } else {
-    el.innerHTML = `✅ <strong>${sel.length} ürün</strong>, toplam <strong>${qty.toLocaleString('tr')} adet</strong> Excel'e aktarılacak.`;
-    document.getElementById('btnExport').disabled = false;
-  }
+  el.innerHTML = `<strong>${sel.length} ürün seçili</strong> · <strong>${qty.toLocaleString('tr')} adet</strong> —
+    Seçili siparişler veya tüm sipariş formu Excel'e aktarılabilir.`;
+  const btnSel = document.getElementById('btnExportSel');
+  if (btnSel) btnSel.disabled = sel.length === 0;
 }
 
 function exportOrder() {
