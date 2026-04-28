@@ -287,6 +287,9 @@ details[open] summary { color:var(--mid); }
 .risk-medium   { background:var(--yellow-bg); color:var(--yellow); }
 .risk-low      { background:var(--green-bg);  color:var(--green);  }
 .risk-none     { background:rgba(255,255,255,0.04); color:var(--dim); }
+.risk-pending  { background:rgba(139,92,246,0.15); color:#a78bfa; }
+.col-filter { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:5px; color:var(--text); font-size:11px; padding:3px 6px; width:100%; box-sizing:border-box; outline:none; }
+.col-filter:focus { border-color:var(--accent); }
 
 /* ─── DATA TABLE ─── */
 .tbl-wrap { overflow-x:auto; }
@@ -630,7 +633,7 @@ details[open] summary { color:var(--mid); }
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="order-tab active" id="otab-all"   onclick="setOrderTab('all')">📋 Tümü</button>
           <button class="order-tab"        id="otab-order" onclick="setOrderTab('order')">🛒 Sipariş Önerileri</button>
-          <button class="order-tab"        id="otab-dead"  onclick="setOrderTab('dead')">💀 Ölü Stok</button>
+          <button class="order-tab"        id="otab-dead"  onclick="setOrderTab('dead')">💀 Ölü Stok (stok var, satış yok)</button>
         </div>
       </div>
 
@@ -1204,18 +1207,22 @@ function runAnalysis() {
     // Excess stock: stock > 30-day demand
     const excessStock = dailyAvg > 0 && currentStock > dailyAvg * 30;
 
-    // Priority based on stockDays
-    let priority, riskClass;
-    if (totalSales === 0) {
+    // Priority based on stock/sales combination and stockDays
+    let priority, riskClass, stockIssue = false;
+    if (totalSales === 0 && currentStock <= 0) {
+      priority = 'GELMEMIŞ'; riskClass = 'pending';
+    } else if (totalSales === 0) {
       priority = 'İZLE';     riskClass = 'none';
+    } else if (currentStock <= 0) {
+      priority = 'ACİL';     riskClass = 'critical'; stockIssue = true;
     } else if (stockDays !== null && stockDays <= 5) {
-      priority = 'ACİL';    riskClass = 'critical';
+      priority = 'ACİL';     riskClass = 'critical';
     } else if (stockDays !== null && stockDays <= 10) {
-      priority = 'YÜKSEK';  riskClass = 'high';
+      priority = 'YÜKSEK';   riskClass = 'high';
     } else if (stockDays !== null && stockDays <= 15) {
-      priority = 'ORTA';    riskClass = 'medium';
+      priority = 'ORTA';     riskClass = 'medium';
     } else {
-      priority = 'DÜŞÜK';   riskClass = 'low';
+      priority = 'DÜŞÜK';    riskClass = 'low';
     }
 
     return {
@@ -1223,13 +1230,13 @@ function runAnalysis() {
       totalSales, currentStock,
       dailyAvg: Math.round(dailyAvg * 100) / 100,
       forecastSeason, daysLeft, orderQty,
-      stockDays, excessStock,
+      stockDays, excessStock, stockIssue,
       priority, riskClass,
     };
   });
 
   // Sort: priority order, then by orderQty desc
-  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4, 'GELMEMIŞ':5 };
   S.results.sort((a, b) =>
     (PO[a.priority] - PO[b.priority]) || (b.orderQty - a.orderQty)
   );
@@ -1542,12 +1549,13 @@ function buildTop10Chart() {
 // Per-product order state: { code → { checked, qty } }
 let orderState = {};
 let orderTabFilter = 'all';
+let orderColFilters = { name:'', code:'', priority:'', note:'' };
 
 function renderOrderSection() {
   // Init orderState for ALL products (checked only if orderQty > 0)
   S.results.forEach(p => {
     if (!orderState[p.code]) {
-      orderState[p.code] = { checked: p.orderQty > 0, qty: p.orderQty };
+      orderState[p.code] = { checked: p.orderQty > 0 || p.priority === 'GELMEMIŞ', qty: p.orderQty };
     }
   });
 
@@ -1582,17 +1590,37 @@ function setOrderTab(tab) {
   renderOrderTable();
 }
 
-function renderOrderTable() {
-  let candidates = S.results;
-  if (orderTabFilter === 'order') candidates = S.results.filter(r => r.orderQty > 0);
-  if (orderTabFilter === 'dead')  candidates = S.results.filter(r => r.totalSales === 0);
+function orderColFilterChange(field, val) {
+  orderColFilters[field] = val.toLowerCase();
+  renderOrderTable();
+  // restore focus
+  const el = document.getElementById('ocf-' + field);
+  if (el) { el.focus(); const l = el.value.length; el.setSelectionRange(l, l); }
+}
 
-  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4 };
+function renderOrderTable() {
+  const PO = { 'ACİL':0, 'YÜKSEK':1, 'ORTA':2, 'DÜŞÜK':3, 'İZLE':4, 'GELMEMIŞ':5 };
+
+  let candidates = S.results;
+  if (orderTabFilter === 'order') candidates = S.results.filter(r => r.orderQty > 0 || r.priority === 'GELMEMIŞ');
+  if (orderTabFilter === 'dead')  candidates = S.results.filter(r => r.totalSales === 0 && r.currentStock > 0);
+
   const sorted = candidates.slice().sort((a, b) =>
     (PO[a.priority] ?? 9) - (PO[b.priority] ?? 9) || b.orderQty - a.orderQty
   );
 
-  if (!sorted.length) {
+  // Apply column filters
+  const cf = orderColFilters;
+  const filtered = sorted.filter(p => {
+    const note = buildOrderNote(p).text.toLowerCase();
+    if (cf.name     && !p.name.toLowerCase().includes(cf.name))         return false;
+    if (cf.code     && !p.code.toLowerCase().includes(cf.code))         return false;
+    if (cf.priority && !p.priority.toLowerCase().includes(cf.priority)) return false;
+    if (cf.note     && !note.includes(cf.note))                         return false;
+    return true;
+  });
+
+  if (!filtered.length) {
     document.getElementById('orderTableWrap').innerHTML = `
       <div class="placeholder">
         <div class="p-ico">📭</div>
@@ -1601,9 +1629,28 @@ function renderOrderTable() {
     return;
   }
 
-  const rows = sorted.map(p => {
-    const st  = orderState[p.code] || { checked: p.orderQty > 0, qty: p.orderQty };
-    const cls = st.checked ? 'row-checked' : 'row-unchecked';
+  const filterRow = `<tr style="background:rgba(255,255,255,0.03);">
+    <td></td>
+    <td><input id="ocf-name"     class="col-filter" placeholder="Ara…" value="${esc(orderColFilters.name)}"     oninput="orderColFilterChange('name',this.value)"></td>
+    <td><input id="ocf-code"     class="col-filter" placeholder="Ara…" value="${esc(orderColFilters.code)}"     oninput="orderColFilterChange('code',this.value)"></td>
+    <td></td>
+    <td></td><td></td><td></td><td></td><td></td><td></td>
+    <td><select id="ocf-priority" class="col-filter" onchange="orderColFilterChange('priority',this.value)">
+      <option value="">Tümü</option>
+      <option value="acil"     ${orderColFilters.priority==='acil'     ?'selected':''}>ACİL</option>
+      <option value="yüksek"   ${orderColFilters.priority==='yüksek'   ?'selected':''}>YÜKSEK</option>
+      <option value="orta"     ${orderColFilters.priority==='orta'     ?'selected':''}>ORTA</option>
+      <option value="düşük"    ${orderColFilters.priority==='düşük'    ?'selected':''}>DÜŞÜK</option>
+      <option value="izle"     ${orderColFilters.priority==='izle'     ?'selected':''}>İZLE</option>
+      <option value="gelmemiş" ${orderColFilters.priority==='gelmemiş' ?'selected':''}>GELMEMIŞ</option>
+    </select></td>
+    <td><input id="ocf-note"     class="col-filter" placeholder="Ara…" value="${esc(orderColFilters.note)}"     oninput="orderColFilterChange('note',this.value)"></td>
+  </tr>`;
+
+  const rows = filtered.map(p => {
+    const st   = orderState[p.code] || { checked: p.orderQty > 0 || p.priority === 'GELMEMIŞ', qty: p.orderQty };
+    const cls  = st.checked ? 'row-checked' : 'row-unchecked';
+    const note = buildOrderNote(p);
     return `<tr id="orow-${esc(p.code)}" class="${cls}">
       <td style="text-align:center;">
         <input type="checkbox" class="order-cb"
@@ -1615,7 +1662,7 @@ function renderOrderTable() {
       <td style="color:var(--mid);font-size:12px;">${esc(p.category)}</td>
       <td class="td-num" style="color:${p.totalSales>0?'var(--green)':'var(--dim)'};">${p.totalSales || '—'}</td>
       <td class="td-num" style="color:var(--mid);">${p.dailyAvg}</td>
-      <td class="td-num">${p.currentStock}</td>
+      <td class="td-num" style="color:${p.currentStock<=0?'var(--red)':'inherit'}">${p.currentStock}</td>
       <td class="td-num" style="color:var(--accent);">${p.forecastSeason || '—'}</td>
       <td style="color:var(--dim);font-size:11px;">
         ${p.stockDays !== null ? p.stockDays + ' gün' : '∞'}
@@ -1629,6 +1676,7 @@ function renderOrderTable() {
           oninput="orderQtyChange('${esc(p.code)}',this.value)">
       </td>
       <td><span class="risk risk-${p.riskClass}">${p.priority}</span></td>
+      <td style="font-size:11px;color:${note.color || 'var(--dim)'};">${note.text}</td>
     </tr>`;
   }).join('');
 
@@ -1636,14 +1684,18 @@ function renderOrderTable() {
     <div class="sec-card" style="padding:0;overflow:hidden;">
       <div class="tbl-wrap">
         <table class="order-tbl">
-          <thead><tr>
-            <th style="width:36px;">✓</th>
-            <th>Ürün Adı</th><th>Kod</th><th>Kategori</th>
-            <th>Top. Satış</th><th>Günlük Ort.</th><th>Stok</th><th>15G Tahmin</th>
-            <th>Stok Günü</th>
-            <th>Sipariş Miktarı</th>
-            <th>Öncelik</th>
-          </tr></thead>
+          <thead>
+            <tr>
+              <th style="width:36px;">✓</th>
+              <th>Ürün Adı</th><th>Kod</th><th>Kategori</th>
+              <th>Top. Satış</th><th>Günlük Ort.</th><th>Stok</th><th>Sezon Tahmini</th>
+              <th>Stok Günü</th>
+              <th>Sipariş Miktarı</th>
+              <th>Öncelik</th>
+              <th>Not</th>
+            </tr>
+            ${filterRow}
+          </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -1760,13 +1812,25 @@ function updateExportHint() {
   if (btnSel) btnSel.disabled = sel.length === 0;
 }
 
+function buildOrderNote(p) {
+  if (p.stockIssue)              return { text:'⚠️ Stok kontrol edilmeli (0 veya eksi)',   color:'#f97316' };
+  if (p.priority === 'GELMEMIŞ') return { text:'📦 Henüz gelmemiş — sipariş önerilir',     color:'#a78bfa' };
+  if (p.priority === 'ACİL')     return { text:`🚨 ${p.stockDays ?? 0} günde tükenir`,      color:'#ef4444' };
+  if (p.priority === 'YÜKSEK')   return { text:`⚡ ${p.stockDays} günde tükenir`,            color:'#f97316' };
+  if (p.priority === 'ORTA')     return { text:`⏳ ${p.stockDays} günde tükenir`,            color:'#fbbf24' };
+  if (p.priority === 'İZLE' && p.currentStock > 0) return { text:'💤 Ölü stok',             color:'#6b7280' };
+  return { text:'', color:'' };
+}
+
 function buildExportNote(p) {
   const dl = p.daysLeft ?? 0;
+  if (p.stockIssue)            return `STOK KONTROL: Stok 0 veya eksiye düşmüş, kayıt kontrol edilmeli`;
+  if (p.priority === 'GELMEMIŞ') return `Henüz gelmemiş — sipariş önerilir`;
   if (p.priority === 'ACİL')   return `KRİTİK: ${p.stockDays ?? 0} günde tükenir, acil sipariş — sezon sonuna ${dl} gün kaldı`;
   if (p.priority === 'YÜKSEK') return `${p.stockDays} günde tükenir, yüksek öncelik — sezon sonu tahmini: ${p.forecastSeason} adet`;
   if (p.priority === 'ORTA')   return `${p.stockDays} günde tükenir, orta öncelik — sezon sonu tahmini: ${p.forecastSeason} adet`;
   if (p.priority === 'DÜŞÜK')  return `Stok sezon sonuna yeterli (${p.stockDays} gün dayanır, ${dl} gün kaldı)`;
-  if (p.totalSales === 0)      return `Satış yok — ölü stok, incelenebilir`;
+  if (p.totalSales === 0 && p.currentStock > 0) return `Satış yok — ölü stok, incelenebilir`;
   return '';
 }
 
