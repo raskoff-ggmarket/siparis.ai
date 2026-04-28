@@ -1095,7 +1095,7 @@ function setChip(id, status) {
 function checkReady() {
   const hasProducts = !!S.files.products;
   const hasSales    = !!S.files.sales;
-  const colsOk      = S.confirmed.products && S.confirmed.sales;
+  const colsOk      = hasProducts && hasSales && S.confirmed.products && S.confirmed.sales;
   const ready       = colsOk;
   const anyLoaded   = hasProducts || hasSales;
 
@@ -1128,19 +1128,45 @@ function startAnalysis() {
   setTimeout(() => {
     try {
       runAnalysis();
+      const diag = buildDiagnostic();
       orderState = {};
-      renderDashboard();
+      renderDashboard(diag);
       renderTable();
       renderOrderSection();
       saveToStorage();
       switchView('dashboard');
     } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 Analizi Başlat';
       alert('Analiz hatası: ' + err.message);
       console.error(err);
+      return;
     }
     btn.disabled = false;
     btn.innerHTML = '🚀 Analizi Başlat';
   }, 30);
+}
+
+function buildDiagnostic() {
+  const total     = S.results.length;
+  const withSales = S.results.filter(r => r.totalSales > 0).length;
+
+  // Sample product codes
+  const cm = S.maps.products;
+  const prodCodes = (S.files.products || []).slice(0, 5)
+    .map(r => String(r[cm?.code] ?? '').trim()).filter(Boolean);
+
+  // Sample sales codes
+  const sc = S.maps.sales;
+  const salesCodes = (S.files.sales || []).slice(0, 5)
+    .map(r => String(r[sc?.code] ?? '').trim()).filter(Boolean);
+
+  console.log('[Analiz Tanısı]', { total, withSales,
+    productCodeField: cm?.code, salesCodeField: sc?.code,
+    prodCodes, salesCodes });
+
+  return { total, withSales, prodCodes, salesCodes,
+           productCodeField: cm?.code, salesCodeField: sc?.code };
 }
 
 function runAnalysis() {
@@ -1242,7 +1268,7 @@ function parseNum(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
 /* ══════════════════════════════════════════
    DASHBOARD RENDER  (charts added in Adım 3)
 ══════════════════════════════════════════ */
-function renderDashboard() {
+function renderDashboard(diag = null) {
   const r   = S.results;
   const cnt = (p) => r.filter(x => x.priority === p).length;
   const totalOrder = r.reduce((s, x) => s + x.orderQty, 0);
@@ -1353,10 +1379,34 @@ function renderDashboard() {
       <div class="chart-wrap-tall"><canvas id="chartTop10"></canvas></div>
     </div>`;
 
+  const warnHtml = (() => {
+    if (!diag || diag.total === 0 || diag.withSales > 0) return '';
+    const pCodes = diag.prodCodes.map(c => `<code>${c}</code>`).join(' ');
+    const sCodes = diag.salesCodes.map(c => `<code>${c}</code>`).join(' ');
+    return `<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:1.7;">
+      <div style="font-weight:700;color:#fca5a5;margin-bottom:6px;">⚠️ Satış verisi eşleşmedi — ${diag.total} ürün analiz edildi, 0 üründe satış bulundu</div>
+      <div style="color:#fecaca;">Ürün kodları iki dosyada farklı formatta görünüyor olabilir.</div>
+      <div style="margin-top:8px;color:#fcd34d;font-size:12px;">
+        <strong>Ürün listesi kodları</strong> (alan: <em>${diag.productCodeField ?? '?'}</em>): ${pCodes || '—'}
+      </div>
+      <div style="color:#fcd34d;font-size:12px;">
+        <strong>Satış listesi kodları</strong> (alan: <em>${diag.salesCodeField ?? '?'}</em>): ${sCodes || '—'}
+      </div>
+      <div style="margin-top:8px;color:#fca5a5;font-size:12px;">Kod sütunlarını kontrol edin veya dosyaları yeniden yükleyip "Sütun Onayla" adımını tekrar yapın.</div>
+    </div>`;
+  })();
+
+  const openingFmt = (() => {
+    if (!S.openingDate) return `Mart 1'den`;
+    const d = S.openingDate;
+    return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}'den`;
+  })();
+
   document.getElementById('dashContent').innerHTML =
+    warnHtml +
     `<div style="margin-bottom:14px;font-size:12px;color:var(--dim);">
       📅 Analiz: <strong style="color:var(--mid)">${mNames[today.getMonth()+1]} ${today.getDate()}</strong>
-      · Mart 1'den bu yana <strong style="color:var(--mid)">${S.elapsedDays} gün</strong> satış verisi
+      · ${openingFmt} bu yana <strong style="color:var(--mid)">${S.elapsedDays} gün</strong> satış verisi
     </div>` + statsHtml + chartsHtml + top10Html + catHtml;
 
   // Build charts after DOM is updated
