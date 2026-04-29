@@ -1,4 +1,4 @@
-const CACHE = 'siparis-v1';
+const CACHE = 'siparis-v2';
 const ASSETS = [
   '/siparis.ai/',
   '/siparis.ai/index.html',

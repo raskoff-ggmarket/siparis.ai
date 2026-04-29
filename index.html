@@ -400,18 +400,6 @@ details[open] summary { color:var(--mid); }
   </div>
   <nav class="nav-list" id="navList"></nav>
   <div class="sidebar-foot" id="sidebarFoot"></div>
-  <div style="padding:12px 14px;border-top:1px solid var(--border);">
-    <a id="downloadBtn" href="index.html" download="siparis-analiz.html"
-       style="display:flex;align-items:center;justify-content:center;gap:7px;
-              background:rgba(255,255,255,0.06);border:1px solid var(--border);
-              border-radius:9px;padding:9px 12px;color:var(--mid);
-              font-size:12px;font-weight:600;text-decoration:none;
-              transition:all .15s;cursor:pointer;"
-       onmouseover="this.style.background='rgba(255,255,255,0.1)';this.style.color='var(--text)'"
-       onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--mid)'">
-      ⬇️ Uygulamayı İndir
-    </a>
-  </div>
 </aside>
 
 <!-- BOTTOM NAV -->
@@ -1188,12 +1176,14 @@ function runAnalysis() {
     const excessStock = dailyAvg > 0 && currentStock > dailyAvg * 30;
 
     // Priority based on stock/sales combination and stockDays
-    let priority, riskClass, stockIssue = false;
+    let priority, riskClass, stockIssue = false, stockNegative = false;
     if (totalSales === 0 && currentStock <= 0) {
       priority = 'GELMEMIŞ'; riskClass = 'pending';
     } else if (totalSales === 0) {
       priority = 'İZLE';     riskClass = 'none';
-    } else if (currentStock <= 0) {
+    } else if (currentStock < 0) {
+      priority = 'ACİL';     riskClass = 'critical'; stockNegative = true;
+    } else if (currentStock === 0) {
       priority = 'ACİL';     riskClass = 'critical'; stockIssue = true;
     } else if (stockDays !== null && stockDays <= 5) {
       priority = 'ACİL';     riskClass = 'critical';
@@ -1210,7 +1200,7 @@ function runAnalysis() {
       totalSales, currentStock,
       dailyAvg: Math.round(dailyAvg * 100) / 100,
       forecastSeason, daysLeft, orderQty,
-      stockDays, excessStock, stockIssue,
+      stockDays, excessStock, stockIssue, stockNegative,
       priority, riskClass,
     };
   });
@@ -1800,18 +1790,20 @@ function updateExportHint() {
 }
 
 function buildOrderNote(p) {
-  if (p.stockIssue)              return { text:'⚠️ Stok kontrol edilmeli (0 veya eksi)',   color:'#f97316' };
-  if (p.priority === 'GELMEMIŞ') return { text:'📦 Henüz gelmemiş — sipariş önerilir',     color:'#a78bfa' };
-  if (p.priority === 'ACİL')     return { text:`🚨 ${p.stockDays ?? 0} günde tükenir`,      color:'#ef4444' };
-  if (p.priority === 'YÜKSEK')   return { text:`⚡ ${p.stockDays} günde tükenir`,            color:'#f97316' };
-  if (p.priority === 'ORTA')     return { text:`⏳ ${p.stockDays} günde tükenir`,            color:'#fbbf24' };
-  if (p.priority === 'İZLE' && p.currentStock > 0) return { text:'💤 Ölü stok',             color:'#6b7280' };
+  if (p.stockNegative)           return { text:'⚠️ Stok eksiye düşmüş — kayıtları kontrol edin', color:'#f97316' };
+  if (p.stockIssue)              return { text:'🚨 Stok tükendi — acil sipariş gerekiyor',        color:'#ef4444' };
+  if (p.priority === 'GELMEMIŞ') return { text:'📦 Henüz gelmemiş — sipariş önerilir',            color:'#a78bfa' };
+  if (p.priority === 'ACİL')     return { text:`🚨 ${p.stockDays ?? 0} günde tükenir`,             color:'#ef4444' };
+  if (p.priority === 'YÜKSEK')   return { text:`⚡ ${p.stockDays} günde tükenir`,                  color:'#f97316' };
+  if (p.priority === 'ORTA')     return { text:`⏳ ${p.stockDays} günde tükenir`,                  color:'#fbbf24' };
+  if (p.priority === 'İZLE' && p.currentStock > 0) return { text:'💤 Ölü stok',                   color:'#6b7280' };
   return { text:'', color:'' };
 }
 
 function buildExportNote(p) {
   const dl = p.daysLeft ?? 0;
-  if (p.stockIssue)            return `STOK KONTROL: Stok 0 veya eksiye düşmüş, kayıt kontrol edilmeli`;
+  if (p.stockNegative)         return `STOK KONTROL: Stok eksiye düşmüş, kayıtlar kontrol edilmeli`;
+  if (p.stockIssue)            return `KRİTİK: Stok tükendi — acil sipariş gerekiyor`;
   if (p.priority === 'GELMEMIŞ') return `Henüz gelmemiş — sipariş önerilir`;
   if (p.priority === 'ACİL')   return `KRİTİK: ${p.stockDays ?? 0} günde tükenir, acil sipariş — sezon sonuna ${dl} gün kaldı`;
   if (p.priority === 'YÜKSEK') return `${p.stockDays} günde tükenir, yüksek öncelik — sezon sonu tahmini: ${p.forecastSeason} adet`;
