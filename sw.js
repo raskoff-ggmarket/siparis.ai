@@ -1,4 +1,4 @@
-const CACHE = 'siparis-v1';
+const CACHE = 'siparis-v3';
 const ASSETS = [
   '/siparis.ai/',
   '/siparis.ai/index.html',
@@ -7,7 +7,8 @@ const ASSETS = [
   '/siparis.ai/icon-512.png',
   '/siparis.ai/manifest.json',
   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+  'https://apis.google.com/js/api.js',
+  'https://accounts.google.com/gsi/client',
 ];
 
 self.addEventListener('install', e => {
